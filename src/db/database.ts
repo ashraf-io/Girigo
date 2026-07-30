@@ -2,28 +2,54 @@ import * as SQLite from 'expo-sqlite';
 
 const DB_NAME = 'girigo.db';
 let dbInstance: SQLite.SQLiteDatabase | null = null;
+let isInitializing = false;
 
-export const getDatabase = async () => {
-  if (!dbInstance) {
+export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
+  if (dbInstance) {
+    return dbInstance;
+  }
+  
+  if (isInitializing) {
+    // Wait for initialization to complete
+    await new Promise<void>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (dbInstance && !isInitializing) {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+    });
+    return dbInstance!;
+  }
+  
+  isInitializing = true;
+  
+  try {
     dbInstance = await SQLite.openDatabaseAsync(DB_NAME);
     await initializeDatabase(dbInstance);
+    isInitializing = false;
+    return dbInstance;
+  } catch (error) {
+    console.error('❌ Database initialization failed:', error);
+    isInitializing = false;
+    dbInstance = null;
+    throw error;
   }
-  return dbInstance;
 };
 
 const initializeDatabase = async (db: SQLite.SQLiteDatabase) => {
   try {
-    // Enable WAL mode for better concurrent read/write performance
+    // Enable WAL mode for better performance
     await db.execAsync('PRAGMA journal_mode = WAL;');
 
-    // 1. Users Table (Local Profile)
+    // 1. Users Table
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         avatar TEXT NOT NULL,
         createdAt INTEGER NOT NULL
-      );
+      )
     `);
 
     // 2. Gamification Stats (Singleton)
@@ -36,13 +62,14 @@ const initializeDatabase = async (db: SQLite.SQLiteDatabase) => {
         longestStreak INTEGER DEFAULT 0,
         lastActivityDate TEXT,
         notificationsEnabled INTEGER DEFAULT 1
-      );
+      )
     `);
     
     // Insert singleton row if it doesn't exist
-    await db.execAsync(`
-      INSERT OR IGNORE INTO gamification_stats (id) VALUES ('me');
-    `);
+    await db.runAsync(
+      'INSERT OR IGNORE INTO gamification_stats (id) VALUES (?)',
+      ['me']
+    );
 
     // 3. Wishes Table
     await db.execAsync(`
@@ -59,25 +86,25 @@ const initializeDatabase = async (db: SQLite.SQLiteDatabase) => {
         commitment TEXT,
         createdAt INTEGER NOT NULL,
         completedAt INTEGER
-      );
+      )
     `);
 
-    // Indexes for <2s query performance (Crucial for NFR-2.1)
-    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_status ON wishes(status);`);
-    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_deadline ON wishes(deadline);`);
-    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_category ON wishes(category);`);
+    // Create indexes for performance
+    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_status ON wishes(status)`);
+    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_deadline ON wishes(deadline)`);
+    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_category ON wishes(category)`);
 
-    // 4. Activity Log (For Heatmap & Streaks)
+    // 4. Activity Log
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS activity_log (
         date TEXT PRIMARY KEY,
         actionCount INTEGER DEFAULT 1
-      );
+      )
     `);
 
     console.log('✅ Girigo Database Initialized Successfully');
   } catch (error) {
-    console.error('❌ Database Initialization Failed:', error);
+    console.error('❌ Database table creation failed:', error);
     throw error;
   }
 };

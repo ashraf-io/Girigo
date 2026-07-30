@@ -124,3 +124,34 @@ Once you run that commit, **Sprint 1 is officially locked in your Git history.**
 You have successfully built a resilient, offline-first onboarding flow that gracefully handles environment limitations. 
 
 Are you ready to move on to **Sprint 2: Wish MVP**? If so, just say **"Start Sprint 2"** and I will provide the code for the Wish Repository, the Create Wish Modal (with the Commitment Statement), and the glowing Time Ring component! 🦊✨
+
+
+
+## 📝 SPRINT 2: TROUBLESHOOTING NOTES
+
+### **Issue 1: SQLite NativeDatabase Null Pointer Exception**
+- **Symptom:** `Call to function 'NativeDatabase.prepareAsync' has been rejected → java.lang.NullPointerException` when trying to create a wish
+- **Root Cause:** Race condition in database initialization - the repository attempted to access the database before `getDatabase()` completed its async initialization, or the initialization failed silently
+- **Resolution:** 
+  1. Added `isInitializing` flag to prevent concurrent initialization attempts
+  2. Implemented promise-based waiting mechanism for concurrent calls
+  3. Added comprehensive error logging at each initialization step
+  4. Wrapped all repository methods in try-catch blocks with proper error propagation
+- **Prevention:** Always await `getDatabase()` before any DB operation; never assume the database is ready
+
+### **Issue 2: Haptics "Unable to activate keep awake" Error**
+- **Symptom:** `Error: Unable to activate keep awake` when calling `Haptics.notificationAsync()`
+- **Root Cause:** Expo Go has limited native module support; haptics requires native permissions that aren't fully available in the Expo Go client
+- **Resolution:** Wrapped haptics calls in a nested try-catch block to silently ignore failures in Expo Go while preserving functionality for future Development Builds
+- **Note:** This is expected behavior in Expo Go; haptics will work in V2 Development Build
+
+### **Issue 3: Tab Bar Icons Not Rendering**
+- **Symptom:** Tab bar shows text labels but no icons
+- **Root Cause:** Missing `tabBarIcon` configuration in `app/(tabs)/_layout.tsx`
+- **Resolution:** Added `lucide-react-native` icons (`Target` and `PlusCircle`) to tab configuration with proper color props
+- **Note:** Required clearing Expo Go cache (`npx expo start -c`) to see changes
+
+### **Known Limitations (V1)**
+- **expo-notifications:** Removed from V1 due to SDK 54 Expo Go limitations; replaced with SQLite preference storage
+- **uuid package:** Replaced with custom ID generator due to missing `crypto` module in React Native
+- **File Watchers:** Termux `ENOSPC` limit resolved via `rm -rf node_modules && npm install`
