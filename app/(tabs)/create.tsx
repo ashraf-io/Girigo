@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
+import { useRouter } from 'expo-router';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../../src/theme/colors';
 import { WishRepository } from '../../src/modules/wish/wish.repository';
 import * as Haptics from 'expo-haptics';
@@ -8,76 +9,77 @@ import * as Haptics from 'expo-haptics';
 const CATEGORIES = [
   { id: 'academic', label: '📚 Academic' },
   { id: 'health', label: '💪 Health' },
-  { id: 'career', label: '💼 Career' },
+  { id: 'career', label: ' Career' },
   { id: 'personal', label: '✨ Personal' },
   { id: 'financial', label: '💰 Financial' },
 ];
 
 export default function CreateWishScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const isEdit = params.id ? true : false;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('academic');
   const [priority, setPriority] = useState('medium');
   const [commitment, setCommitment] = useState('');
-  const [deadline, setDeadline] = useState(''); // Format: YYYY-MM-DDTHH:MM
+  
+  // Date/Time Picker State
+  const [deadlineDate, setDeadlineDate] = useState(new Date());
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || deadlineDate;
+    // On Android, the picker closes automatically after selection. On iOS, it stays open.
+    setShowPicker(Platform.OS === 'ios');
+    setDeadlineDate(currentDate);
+  };
+
+  const showDatepicker = () => {
+    setPickerMode('date');
+    setShowPicker(true);
+  };
+
+  const showTimepicker = () => {
+    setPickerMode('time');
+    setShowPicker(true);
+  };
 
   const handleSave = async () => {
-    if (!title.trim() || !deadline) {
-      Alert.alert('Missing Fields', 'Title and Deadline are required.');
+    if (!title.trim()) {
+      Alert.alert('Missing Title', 'Please enter a title for your wish.');
       return;
     }
     if (priority === 'high' && !commitment.trim()) {
       Alert.alert('Commitment Required', 'High priority wishes require a commitment statement.');
       return;
     }
-  //
-  //   try {
-  //     await WishRepository.create({
-  //       title: title.trim(),
-  //       description: description.trim() || null,
-  //       category,
-  //       priority,
-  //       deadline: new Date(deadline).toISOString(),
-  //       status: 'active',
-  //       progress: 0,
-  //       commitment: priority === 'high' ? commitment.trim() : null,
-  //     });
-  //
-  //     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  //     router.back();
-  //   } catch (error) {
-  //     Alert.alert('Error', 'Failed to create wish.');
-  //   }
-  // };
 
-try {
-  await WishRepository.create({
-    title: title.trim(),
-    description: description.trim() || null,
-    category,
-    priority,
-    deadline: new Date(deadline).toISOString(),
-    status: 'active',
-    progress: 0,
-    commitment: priority === 'high' ? commitment.trim() : null,
-  });
-  
-  try {
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  } catch (hapticError) {
-    // Haptics not available in Expo Go, silently ignore
-    console.log('Haptics not available');
-  }
-  
-  router.back();
-} catch (error) {
-  Alert.alert('Error', 'Failed to create wish.');
-}
-};
+    try {
+      await WishRepository.create({
+        title: title.trim(),
+        description: description.trim() || null,
+        category,
+        priority,
+        deadline: deadlineDate.toISOString(), // Use the Date object directly
+        status: 'active',
+        progress: 0,
+        commitment: priority === 'high' ? commitment.trim() : null,
+      });
+      
+      try {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (hapticError) {
+        console.log('Haptics not available');
+      }
+      
+      router.back();
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to create wish.');
+    }
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.header}>Inscribe a New Wish</Text>
@@ -145,14 +147,32 @@ try {
         </View>
       )}
 
+      {/* NEW: Native Date/Time Picker UI */}
       <Text style={styles.label}>Deadline</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="YYYY-MM-DD HH:MM (e.g., 2026-08-05 20:00)"
-        placeholderTextColor={Colors.ghostDim}
-        value={deadline}
-        onChangeText={setDeadline}
-      />
+      <View style={styles.deadlineRow}>
+        <TouchableOpacity style={styles.deadlineButton} onPress={showDatepicker}>
+          <Text style={styles.deadlineButtonText}>
+            📅 {deadlineDate.toLocaleDateString()}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.deadlineButton} onPress={showTimepicker}>
+          <Text style={styles.deadlineButtonText}>
+            ⏰ {deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {showPicker && (
+        <DateTimePicker
+          testID="dateTimePicker"
+          value={deadlineDate}
+          mode={pickerMode}
+          is24Hour={true}
+          display="default"
+          onChange={onDateChange}
+          style={styles.dateTimePicker}
+        />
+      )}
 
       <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
         <Text style={styles.saveButtonText}>Forge Pact</Text>
@@ -177,6 +197,13 @@ const styles = StyleSheet.create({
   commitmentBox: { backgroundColor: Colors.crimson[500] + '10', borderWidth: 1, borderColor: Colors.crimson[500] + '40', borderRadius: 12, padding: 16, marginBottom: 16 },
   commitmentLabel: { fontFamily: 'Inter-Bold', fontSize: 14, color: Colors.crimson[400], marginBottom: 8 },
   commitmentInput: { color: Colors.ghost, fontFamily: 'Inter-Regular', fontSize: 14, fontStyle: 'italic' },
+  
+  // New Date/Time Picker Styles
+  deadlineRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  deadlineButton: { flex: 1, backgroundColor: Colors.abyss2, borderWidth: 1, borderColor: Colors.mystic[500] + '40', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  deadlineButtonText: { fontFamily: 'JetBrainsMono-Regular', fontSize: 14, color: Colors.ghost },
+  dateTimePicker: { marginBottom: 16 },
+
   saveButton: { backgroundColor: Colors.mystic[500], paddingVertical: 18, borderRadius: 16, alignItems: 'center', marginTop: 16, shadowColor: Colors.mystic[500], shadowOpacity: 0.4, shadowRadius: 10, elevation: 5 },
   saveButtonText: { fontFamily: 'Inter-Bold', fontSize: 18, color: Colors.ghost },
 });
