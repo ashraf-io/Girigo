@@ -176,15 +176,26 @@ export default function WishDetailScreen() {
     return () => {
       setShowDatePicker(false);
       isShowingAlert.current = false;
+      hasShownExpiredAlert = false;
     };
   }, []);
 
-  const handleProgressChange = async (value: number) => {
+  // Debounced progress update to prevent excessive DB writes
+  const progressUpdateTimeout = useRef<NodeJS.Timeout | null>(null);
+  
+  const handleProgressChange = useCallback((value: number) => {
     setProgress(value);
     if (wish) {
-      await WishRepository.updateProgress(wish.id, Math.round(value));
+      // Clear any pending update
+      if (progressUpdateTimeout.current) {
+        clearTimeout(progressUpdateTimeout.current);
+      }
+      // Debounce DB write by 300ms
+      progressUpdateTimeout.current = setTimeout(async () => {
+        await WishRepository.updateProgress(wish.id, Math.round(value));
+      }, 300);
     }
-  };
+  }, [wish]);
 
   const handleComplete = async () => {
     if (!wish) return;

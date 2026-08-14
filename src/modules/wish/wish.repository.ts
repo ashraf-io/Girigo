@@ -21,6 +21,7 @@ export const WishRepository = {
     try {
       const db = await getDatabase();
       const now = new Date().toISOString();
+      // Only run UPDATE if there are actually expired wishes (optimization)
       const result = await db.runAsync(
         "UPDATE wishes SET status = 'expired' WHERE status = 'active' AND deadline < ?",
         [now]
@@ -37,8 +38,9 @@ export const WishRepository = {
     try {
       const db = await getDatabase();
       
-      // Only check and expire wishes when fetching active ones
-      if (!statusFilter || statusFilter === 'active') {
+      // Optimization: Only check and expire wishes when fetching active ones
+      // For other filters (completed, abandoned, expired), skip the expire check
+      if (!statusFilter || statusFilter === 'active' || statusFilter === 'all') {
         await this.checkAndExpireWishes();
       }
       

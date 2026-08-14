@@ -1,11 +1,55 @@
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useMemo, memo } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Flame, Trophy, Target, Zap } from 'lucide-react-native';
 import { Colors } from '../../src/theme/colors';
 import { WishRepository, Wish } from '../../src/modules/wish/wish.repository';
 import { GamificationService, GamificationStats } from '../../src/modules/gamification/gamification.service';
 import { TimeRing } from '../../src/components/common/TimeRing';
+
+// Memoized wish card component to prevent unnecessary re-renders
+const WishCard = memo(({ item, onPress }: { item: Wish; onPress: () => void }) => {
+  // Memoize time calculations
+  const { percentage, label, isUrgent } = useMemo(() => {
+    const now = Date.now();
+    const end = new Date(item.deadline).getTime();
+    const total = end - now;
+    const percentage = total <= 0 ? 0 : Math.round(Math.min(100, Math.max(0, (total / 604800000) * 100)));
+    
+    const diff = end - now;
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(hours / 24);
+    const label = diff <= 0 ? '0h' : days > 0 ? `${days}d` : `${hours}h`;
+    
+    const isUrgent = percentage <= 20;
+    
+    return { percentage, label, isUrgent };
+  }, [item.deadline]);
+
+  return (
+    <TouchableOpacity 
+      style={[styles.wishCard, isUrgent && styles.wishCardUrgent]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.wishContent}>
+        <View style={styles.wishHeader}>
+          <Text style={styles.wishTitle} numberOfLines={1}>{item.title}</Text>
+          <Text style={[styles.wishPriority, isUrgent ? { color: Colors.crimson[400] } : { color: Colors.ghostMuted }]}>
+            {item.priority.toUpperCase()}
+          </Text>
+        </View>
+        <Text style={styles.wishCategory}>{item.category}</Text>
+        {item.commitment && (
+          <Text style={styles.wishCommitment} numberOfLines={1}>"{item.commitment}"</Text>
+        )}
+      </View>
+      <TimeRing percentage={percentage} label={label} size={48} />
+    </TouchableOpacity>
+  );
+});
+
+WishCard.displayName = 'WishCard';
 
 export default function DashboardScreen() {
   const [stats, setStats] = useState<GamificationStats | null>(null);
@@ -151,32 +195,17 @@ export default function DashboardScreen() {
     );
   };
 
-  const renderWish = ({ item }: { item: Wish }) => {
-    const percentage = getTimePercentage(item.deadline);
-    const label = getTimeLabel(item.deadline);
-    const isUrgent = percentage <= 20;
+  const renderWish = useCallback(({ item }: { item: Wish }) => (
+    <WishCard item={item} onPress={() => router.push(`/wish/${item.id}`)} />
+  ), [router]);
 
-    return (
-      <TouchableOpacity 
-        style={[styles.wishCard, isUrgent && styles.wishCardUrgent]}
-        onPress={() => router.push(`/wish/${item.id}`)}
-      >
-        <View style={styles.wishContent}>
-          <View style={styles.wishHeader}>
-            <Text style={styles.wishTitle} numberOfLines={1}>{item.title}</Text>
-            <Text style={[styles.wishPriority, isUrgent ? { color: Colors.crimson[400] } : { color: Colors.ghostMuted }]}>
-              {item.priority.toUpperCase()}
-            </Text>
-          </View>
-          <Text style={styles.wishCategory}>{item.category}</Text>
-          {item.commitment && (
-            <Text style={styles.wishCommitment} numberOfLines={1}>"{item.commitment}"</Text>
-          )}
-        </View>
-        <TimeRing percentage={percentage} label={label} size={48} />
-      </TouchableOpacity>
-    );
-  };
+  // Optimized FlatList props for better performance
+  const flatListProps = useMemo(() => ({
+    windowSize: 5,
+    maxToRenderPerBatch: 3,
+    removeClippedSubviews: true,
+    initialNumToRender: 5,
+  }), []);
 
   return (
     <View style={styles.container}>
@@ -187,6 +216,7 @@ export default function DashboardScreen() {
         ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        {...flatListProps}
         ListEmptyComponent={
           !isLoading && wishes.length === 0 ? (
             <View style={styles.emptyState}>
