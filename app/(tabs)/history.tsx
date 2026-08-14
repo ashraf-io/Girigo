@@ -12,7 +12,8 @@ export default function HistoryScreen() {
 
   const loadWishes = useCallback(() => {
     const fetchWishes = async () => {
-      const allWishes = await WishRepository.getAll();
+      // Pass the specific filter to avoid unnecessary expire checks
+      const allWishes = await WishRepository.getAll(filter === 'all' ? undefined : filter);
       const filtered = filter === 'all' 
         ? allWishes.filter(w => w.status !== 'active')
         : allWishes.filter(w => w.status === filter);

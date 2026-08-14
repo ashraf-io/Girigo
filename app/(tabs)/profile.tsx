@@ -28,10 +28,11 @@ export default function ProfileScreen() {
         setIsLoading(true);
         try {
           const db = await getDatabase();
+          // Fetch only active wishes for count, avoid unnecessary expire checks on all data
           const [user, gamificationStats, allWishes] = await Promise.all([
             db.getFirstAsync('SELECT name, avatar FROM users LIMIT 1'),
             GamificationService.getStats(),
-            WishRepository.getAll(),
+            WishRepository.getAll('all'), // Get all without triggering expire check
           ]);
 
           if (user) {

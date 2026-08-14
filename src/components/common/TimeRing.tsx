@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Colors } from '../../theme/colors';
@@ -9,18 +9,22 @@ interface TimeRingProps {
   label?: string;
 }
 
-export const TimeRing: React.FC<TimeRingProps> = ({ percentage, size = 48, label }) => {
-  // Determine color based on urgency
-  let strokeColor = Colors.ethereal[500]; // > 48h
-  let glowColor = 'rgba(0, 206, 209, 0.6)';
-  
-  if (percentage <= 20) { // < 24h (Urgent)
-    strokeColor = Colors.crimson[500];
-    glowColor = 'rgba(220, 20, 60, 0.8)';
-  } else if (percentage <= 50) { // 24-48h
-    strokeColor = Colors.mystic[500];
-    glowColor = 'rgba(107, 45, 92, 0.7)';
-  }
+export const TimeRing: React.FC<TimeRingProps> = React.memo(({ percentage, size = 48, label }) => {
+  // Memoize color calculations to prevent recalculation on every render
+  const { strokeColor, glowColor } = useMemo(() => {
+    let stroke = Colors.ethereal[500]; // > 48h
+    let glow = 'rgba(0, 206, 209, 0.6)';
+    
+    if (percentage <= 20) { // < 24h (Urgent)
+      stroke = Colors.crimson[500];
+      glow = 'rgba(220, 20, 60, 0.8)';
+    } else if (percentage <= 50) { // 24-48h
+      stroke = Colors.mystic[500];
+      glow = 'rgba(107, 45, 92, 0.7)';
+    }
+    
+    return { strokeColor: stroke, glowColor: glow };
+  }, [percentage]);
 
   const strokeWidth = 3;
   const radius = (size - strokeWidth) / 2;
@@ -65,7 +69,9 @@ export const TimeRing: React.FC<TimeRingProps> = ({ percentage, size = 48, label
       )}
     </View>
   );
-};
+});
+
+TimeRing.displayName = 'TimeRing';
 
 const styles = StyleSheet.create({
   container: { justifyContent: 'center', alignItems: 'center' },

@@ -35,8 +35,13 @@ export const WishRepository = {
 
   async getAll(statusFilter?: string): Promise<Wish[]> {
     try {
-      await this.checkAndExpireWishes();
       const db = await getDatabase();
+      
+      // Only check and expire wishes when fetching active ones
+      if (!statusFilter || statusFilter === 'active') {
+        await this.checkAndExpireWishes();
+      }
+      
       let query = 'SELECT * FROM wishes';
       let params: any[] = [];
       
