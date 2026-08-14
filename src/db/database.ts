@@ -5,12 +5,9 @@ let dbInstance: SQLite.SQLiteDatabase | null = null;
 let isInitializing = false;
 
 export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  if (dbInstance) {
-    return dbInstance;
-  }
+  if (dbInstance) return dbInstance;
   
   if (isInitializing) {
-    // Wait for initialization to complete
     await new Promise<void>((resolve) => {
       const checkInterval = setInterval(() => {
         if (dbInstance && !isInitializing) {
@@ -23,7 +20,6 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   }
   
   isInitializing = true;
-  
   try {
     dbInstance = await SQLite.openDatabaseAsync(DB_NAME);
     await initializeDatabase(dbInstance);
@@ -39,66 +35,46 @@ export const getDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
 
 const initializeDatabase = async (db: SQLite.SQLiteDatabase) => {
   try {
-    // Enable WAL mode for better performance
     await db.execAsync('PRAGMA journal_mode = WAL;');
 
-    // 1. Users Table
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        avatar TEXT NOT NULL,
-        createdAt INTEGER NOT NULL
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT NOT NULL, createdAt INTEGER NOT NULL
       )
     `);
 
-    // 2. Gamification Stats (Singleton)
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS gamification_stats (
         id TEXT PRIMARY KEY CHECK (id = 'me'),
-        xp INTEGER DEFAULT 0,
-        level INTEGER DEFAULT 1,
-        currentStreak INTEGER DEFAULT 0,
-        longestStreak INTEGER DEFAULT 0,
-        lastActivityDate TEXT,
-        notificationsEnabled INTEGER DEFAULT 1
+        xp INTEGER DEFAULT 0, level INTEGER DEFAULT 1, currentStreak INTEGER DEFAULT 0,
+        longestStreak INTEGER DEFAULT 0, lastActivityDate TEXT, notificationsEnabled INTEGER DEFAULT 1,
+        dailyReminderId TEXT
       )
     `);
     
-    // Insert singleton row if it doesn't exist
-    await db.runAsync(
-      'INSERT OR IGNORE INTO gamification_stats (id) VALUES (?)',
-      ['me']
-    );
+    // Safe migration: add column if it doesn't exist
+    try {
+      await db.execAsync(`ALTER TABLE gamification_stats ADD COLUMN dailyReminderId TEXT`);
+    } catch (e) { /* Column already exists, ignore */ }
 
-    // 3. Wishes Table
+    await db.runAsync('INSERT OR IGNORE INTO gamification_stats (id) VALUES (?)', ['me']);
+
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS wishes (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        description TEXT,
-        category TEXT NOT NULL,
-        priority TEXT NOT NULL,
-        deadline TEXT NOT NULL,
-        status TEXT DEFAULT 'active',
-        progress INTEGER DEFAULT 0,
-        xpEarned INTEGER DEFAULT 0,
-        commitment TEXT,
-        createdAt INTEGER NOT NULL,
-        completedAt INTEGER
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, category TEXT NOT NULL,
+        priority TEXT NOT NULL, deadline TEXT NOT NULL, status TEXT DEFAULT 'active',
+        progress INTEGER DEFAULT 0, xpEarned INTEGER DEFAULT 0, commitment TEXT,
+        createdAt INTEGER NOT NULL, completedAt INTEGER
       )
     `);
 
-    // Create indexes for performance
     await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_status ON wishes(status)`);
     await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_deadline ON wishes(deadline)`);
     await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_category ON wishes(category)`);
 
-    // 4. Activity Log
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS activity_log (
-        date TEXT PRIMARY KEY,
-        actionCount INTEGER DEFAULT 1
+        date TEXT PRIMARY KEY, actionCount INTEGER DEFAULT 1
       )
     `);
 

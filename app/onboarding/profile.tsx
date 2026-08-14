@@ -1,12 +1,15 @@
-
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { getDatabase } from '../../src/db/database';
-import { v4 as uuidv4 } from 'uuid';
 
 const AVATARS = ['🦊', '🐼', '🦁', '🐯', '🦄', '🐲', '🦋', '🐺', '🦅', '🐙', '🐨', '🐸'];
+
+// React Native-compatible ID generator (replaces uuidv4 to avoid crypto errors)
+const generateId = () => {
+  return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9);
+};
 
 export default function ProfileScreen() {
   const [name, setName] = useState('');
@@ -21,7 +24,7 @@ export default function ProfileScreen() {
 
     try {
       const db = await getDatabase();
-      const userId = uuidv4();
+      const userId = generateId(); // <-- Uses the safe generator instead of uuidv4
       
       // Save to SQLite
       await db.runAsync(
@@ -48,6 +51,7 @@ export default function ProfileScreen() {
         value={name}
         onChangeText={setName}
         maxLength={20}
+        autoCapitalize="words"
       />
 
       <Text style={styles.sectionTitle}>Choose an Avatar</Text>

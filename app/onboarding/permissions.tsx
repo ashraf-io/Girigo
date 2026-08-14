@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
 import { getDatabase } from '../../src/db/database';
+import { requestNotificationPermission, scheduleDailyStreakReminder } from '../../src/services/notification.service';
 
 export default function PermissionsScreen() {
   const router = useRouter();
@@ -9,61 +10,48 @@ export default function PermissionsScreen() {
   const handlePermissionChoice = async (allow: boolean) => {
     try {
       const db = await getDatabase();
-      // Save preference to our singleton gamification_stats row
-      await db.runAsync(
-        'UPDATE gamification_stats SET notificationsEnabled = ? WHERE id = ?',
-        [allow ? 1 : 0, 'me']
-      );
+      let granted = false;
+      let dailyReminderId: string | null = null;
 
       if (allow) {
-        // TODO (V2 Dev Build): Replace this Alert with:
-        // const { status } = await Notifications.requestPermissionsAsync();
-        Alert.alert(
-          'Preference Saved',
-          'In the V2 Development Build, this will trigger the native notification permission prompt. For now, your preference is saved to the database!'
-        );
+        granted = await requestNotificationPermission();
+        if (granted) {
+          dailyReminderId = await scheduleDailyStreakReminder(20, 0); // 8:00 PM default
+        } else {
+          Alert.alert('Permission Denied', "You can enable notifications later in Settings.");
+        }
       }
 
-      // Navigate to main app
+      await db.runAsync(
+        'UPDATE gamification_stats SET notificationsEnabled = ?, dailyReminderId = ? WHERE id = ?',
+        [granted ? 1 : 0, dailyReminderId, 'me']
+      );
+
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Permission setup failed:', error);
-      // Fallback: still navigate to tabs even if DB update fails
       router.replace('/(tabs)');
     }
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.iconContainer}>
-        <Text style={styles.icon}>🔔</Text>
-      </View>
+      <View style={styles.iconContainer}><Text style={styles.icon}>🔔</Text></View>
       <Text style={styles.title}>Stay on track</Text>
-      <Text style={styles.subtitle}>
-        Get gentle reminders for deadlines and your daily streak. You can change this anytime in settings.
-      </Text>
-
+      <Text style={styles.subtitle}>Get gentle reminders for deadlines and your daily streak.</Text>
       <View style={styles.featureList}>
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>🔥</Text>
-          <View>
-            <Text style={styles.featureTitle}>Daily streak reminder</Text>
-            <Text style={styles.featureDesc}>Every evening at 8 PM</Text>
-          </View>
+          <View><Text style={styles.featureTitle}>Daily streak reminder</Text><Text style={styles.featureDesc}>Every evening at 8 PM</Text></View>
         </View>
         <View style={styles.featureItem}>
           <Text style={styles.featureIcon}>⏰</Text>
-          <View>
-            <Text style={styles.featureTitle}>Deadline alerts</Text>
-            <Text style={styles.featureDesc}>24h and 1h before due</Text>
-          </View>
+          <View><Text style={styles.featureTitle}>Deadline alerts</Text><Text style={styles.featureDesc}>24h and 1h before due</Text></View>
         </View>
       </View>
-
       <TouchableOpacity style={styles.buttonPrimary} onPress={() => handlePermissionChoice(true)}>
         <Text style={styles.buttonText}>Enable Notifications</Text>
       </TouchableOpacity>
-
       <TouchableOpacity style={styles.buttonSecondary} onPress={() => handlePermissionChoice(false)}>
         <Text style={styles.buttonSecondaryText}>Maybe later</Text>
       </TouchableOpacity>

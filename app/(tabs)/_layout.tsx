@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
-import { Target, PlusCircle } from 'lucide-react-native';
+import { Target, PlusCircle, User, Archive } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -15,30 +15,13 @@ export default function TabLayout() {
         },
         tabBarActiveTintColor: Colors.ethereal[400],
         tabBarInactiveTintColor: Colors.ghostDim,
-        tabBarLabelStyle: {
-          fontFamily: 'Inter-Bold',
-          fontSize: 12,
-        },
+        tabBarLabelStyle: { fontFamily: 'Inter-Bold', fontSize: 10 },
       }}
     >
-      <Tabs.Screen 
-        name="index" 
-        options={{ 
-          title: 'Wishes',
-          tabBarIcon: ({ color, size }) => (
-            <Target color={color} size={size} />
-          ),
-        }} 
-      />
-      <Tabs.Screen 
-        name="create" 
-        options={{ 
-          title: 'Create',
-          tabBarIcon: ({ color, size }) => (
-            <PlusCircle color={color} size={size} />
-          ),
-        }} 
-      />
+      <Tabs.Screen name="index" options={{ title: 'Active', tabBarIcon: ({ color, size }) => <Target color={color} size={size} /> }} />
+      <Tabs.Screen name="history" options={{ title: 'History', tabBarIcon: ({ color, size }) => <Archive color={color} size={size} /> }} />
+      <Tabs.Screen name="create" options={{ title: 'Create', tabBarIcon: ({ color, size }) => <PlusCircle color={color} size={size} /> }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, size }) => <User color={color} size={size} /> }} />
     </Tabs>
   );
 }

@@ -1,130 +1,153 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../../src/theme/colors';
 import { WishRepository } from '../../src/modules/wish/wish.repository';
 import * as Haptics from 'expo-haptics';
+import { scheduleWishDeadlineReminders } from '../../src/services/notification.service';
 
 const CATEGORIES = [
   { id: 'academic', label: '📚 Academic' },
   { id: 'health', label: '💪 Health' },
-  { id: 'career', label: ' Career' },
+  { id: 'career', label: '💼 Career' },
   { id: 'personal', label: '✨ Personal' },
   { id: 'financial', label: '💰 Financial' },
+  { id: 'custom', label: '✏️ Custom' },
 ];
 
 export default function CreateWishScreen() {
   const router = useRouter();
-
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('academic');
   const [priority, setPriority] = useState('medium');
   const [commitment, setCommitment] = useState('');
-  
-  // Date/Time Picker State
   const [deadlineDate, setDeadlineDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
+  const [customCategory, setCustomCategory] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     const currentDate = selectedDate || deadlineDate;
-    // On Android, the picker closes automatically after selection. On iOS, it stays open.
+    
+    if (currentDate.getTime() < Date.now() - 60000) {
+      Alert.alert('Invalid Date', 'Deadline cannot be in the past. Please select a future date.', [{ text: 'OK' }]);
+      setDeadlineDate(new Date(Date.now() + 3600000));
+      setShowPicker(false);
+      return;
+    }
+    
     setShowPicker(Platform.OS === 'ios');
     setDeadlineDate(currentDate);
   };
 
-  const showDatepicker = () => {
-    setPickerMode('date');
-    setShowPicker(true);
-  };
-
-  const showTimepicker = () => {
-    setPickerMode('time');
-    setShowPicker(true);
-  };
-
   const handleSave = async () => {
+    if (isSaving) return;
+    
     if (!title.trim()) {
       Alert.alert('Missing Title', 'Please enter a title for your wish.');
       return;
     }
+    
+    const finalCategory = category === 'custom' ? customCategory.trim() : category;
+    if (!finalCategory) {
+      Alert.alert('Missing Category', 'Please enter a custom category name.');
+      return;
+    }
+
     if (priority === 'high' && !commitment.trim()) {
       Alert.alert('Commitment Required', 'High priority wishes require a commitment statement.');
       return;
     }
 
+    setIsSaving(true);
+
     try {
-      await WishRepository.create({
+      const createdWish = await WishRepository.create({
         title: title.trim(),
         description: description.trim() || null,
-        category,
+        category: finalCategory,
         priority,
-        deadline: deadlineDate.toISOString(), // Use the Date object directly
+        deadline: deadlineDate.toISOString(),
         status: 'active',
         progress: 0,
         commitment: priority === 'high' ? commitment.trim() : null,
       });
+
+      await scheduleWishDeadlineReminders(createdWish.id, createdWish.title, createdWish.deadline);
       
-      try {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } catch (hapticError) {
-        console.log('Haptics not available');
+      try { 
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); 
+      } catch (e) {
+        // Ignore haptics error in Expo Go
       }
       
-      router.back();
+      router.replace('/(tabs)');
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'Failed to create wish.');
+      setIsSaving(false);
     }
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.header}>Inscribe a New Wish</Text>
+      <Text style={styles.header}>Create New Wish</Text>
       
-      <TextInput
-        style={styles.input}
-        placeholder="What do you want to achieve?"
-        placeholderTextColor={Colors.ghostDim}
-        value={title}
-        onChangeText={setTitle}
+      <TextInput 
+        style={styles.input} 
+        placeholder="What do you want to achieve?" 
+        placeholderTextColor={Colors.ghostDim} 
+        value={title} 
+        onChangeText={setTitle} 
+        editable={!isSaving} 
       />
-
-      <TextInput
-        style={[styles.input, styles.textArea]}
-        placeholder="Description (optional)"
-        placeholderTextColor={Colors.ghostDim}
-        value={description}
-        onChangeText={setDescription}
-        multiline
-        numberOfLines={3}
+      <TextInput 
+        style={[styles.input, styles.textArea]} 
+        placeholder="Description (optional)" 
+        placeholderTextColor={Colors.ghostDim} 
+        value={description} 
+        onChangeText={setDescription} 
+        multiline 
+        numberOfLines={3} 
+        editable={!isSaving} 
       />
-
+      
       <Text style={styles.label}>Category</Text>
       <View style={styles.chipRow}>
         {CATEGORIES.map((cat) => (
-          <TouchableOpacity
-            key={cat.id}
-            style={[styles.chip, category === cat.id && styles.chipActive]}
+          <TouchableOpacity 
+            key={cat.id} 
+            style={[styles.chip, category === cat.id && styles.chipActive]} 
             onPress={() => setCategory(cat.id)}
+            disabled={isSaving}
           >
             <Text style={[styles.chipText, category === cat.id && styles.chipTextActive]}>{cat.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
+      {category === 'custom' && (
+        <TextInput
+          style={styles.input}
+          placeholder="Enter custom category (e.g., Hobbies)"
+          placeholderTextColor={Colors.ghostDim}
+          value={customCategory}
+          onChangeText={setCustomCategory}
+          editable={!isSaving}
+        />
+      )}
+
       <Text style={styles.label}>Priority</Text>
       <View style={styles.chipRow}>
         {['low', 'medium', 'high'].map((p) => (
-          <TouchableOpacity
-            key={p}
-            style={[
-              styles.chip, 
-              priority === p && (p === 'high' ? styles.chipHigh : styles.chipActive)
-            ]}
+          <TouchableOpacity 
+            key={p} 
+            style={[styles.chip, priority === p && (p === 'high' ? styles.chipHigh : styles.chipActive)]} 
             onPress={() => setPriority(p)}
+            disabled={isSaving}
           >
             <Text style={[styles.chipText, priority === p && styles.chipTextActive]}>
               {p === 'high' ? '🔥 High' : p === 'medium' ? '⚡ Medium' : '🌱 Low'}
@@ -136,46 +159,58 @@ export default function CreateWishScreen() {
       {priority === 'high' && (
         <View style={styles.commitmentBox}>
           <Text style={styles.commitmentLabel}>📜 Your Commitment (Required)</Text>
-          <TextInput
-            style={styles.commitmentInput}
-            placeholder="What are you willing to sacrifice for this?"
-            placeholderTextColor={Colors.ghostDim}
-            value={commitment}
-            onChangeText={setCommitment}
-            multiline
+          <TextInput 
+            style={styles.commitmentInput} 
+            placeholder="What are you willing to sacrifice for this?" 
+            placeholderTextColor={Colors.ghostDim} 
+            value={commitment} 
+            onChangeText={setCommitment} 
+            multiline 
+            editable={!isSaving} 
           />
         </View>
       )}
 
-      {/* NEW: Native Date/Time Picker UI */}
       <Text style={styles.label}>Deadline</Text>
       <View style={styles.deadlineRow}>
-        <TouchableOpacity style={styles.deadlineButton} onPress={showDatepicker}>
-          <Text style={styles.deadlineButtonText}>
-            📅 {deadlineDate.toLocaleDateString()}
-          </Text>
+        <TouchableOpacity 
+          style={styles.deadlineButton} 
+          onPress={() => { setPickerMode('date'); setShowPicker(true); }}
+          disabled={isSaving}
+        >
+          <Text style={styles.deadlineButtonText}>📅 {deadlineDate.toLocaleDateString()}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.deadlineButton} onPress={showTimepicker}>
-          <Text style={styles.deadlineButtonText}>
-            ⏰ {deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
+        <TouchableOpacity 
+          style={styles.deadlineButton} 
+          onPress={() => { setPickerMode('time'); setShowPicker(true); }}
+          disabled={isSaving}
+        >
+          <Text style={styles.deadlineButtonText}>⏰ {deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
         </TouchableOpacity>
       </View>
 
       {showPicker && (
-        <DateTimePicker
-          testID="dateTimePicker"
-          value={deadlineDate}
-          mode={pickerMode}
-          is24Hour={true}
-          display="default"
-          onChange={onDateChange}
-          style={styles.dateTimePicker}
+        <DateTimePicker 
+          testID="dateTimePicker" 
+          value={deadlineDate} 
+          mode={pickerMode} 
+          is24Hour={true} 
+          display="default" 
+          onChange={onDateChange} 
+          style={styles.dateTimePicker} 
         />
       )}
 
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-        <Text style={styles.saveButtonText}>Forge Pact</Text>
+      <TouchableOpacity 
+        style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} 
+        onPress={handleSave}
+        disabled={isSaving}
+      >
+        {isSaving ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.saveButtonText}>Save Wish</Text>
+        )}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -197,13 +232,11 @@ const styles = StyleSheet.create({
   commitmentBox: { backgroundColor: Colors.crimson[500] + '10', borderWidth: 1, borderColor: Colors.crimson[500] + '40', borderRadius: 12, padding: 16, marginBottom: 16 },
   commitmentLabel: { fontFamily: 'Inter-Bold', fontSize: 14, color: Colors.crimson[400], marginBottom: 8 },
   commitmentInput: { color: Colors.ghost, fontFamily: 'Inter-Regular', fontSize: 14, fontStyle: 'italic' },
-  
-  // New Date/Time Picker Styles
   deadlineRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   deadlineButton: { flex: 1, backgroundColor: Colors.abyss2, borderWidth: 1, borderColor: Colors.mystic[500] + '40', borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   deadlineButtonText: { fontFamily: 'JetBrainsMono-Regular', fontSize: 14, color: Colors.ghost },
   dateTimePicker: { marginBottom: 16 },
-
   saveButton: { backgroundColor: Colors.mystic[500], paddingVertical: 18, borderRadius: 16, alignItems: 'center', marginTop: 16, shadowColor: Colors.mystic[500], shadowOpacity: 0.4, shadowRadius: 10, elevation: 5 },
+  saveButtonDisabled: { opacity: 0.6 },
   saveButtonText: { fontFamily: 'Inter-Bold', fontSize: 18, color: Colors.ghost },
 });

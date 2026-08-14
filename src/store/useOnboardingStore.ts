@@ -8,6 +8,7 @@ interface OnboardingState {
   isLoading: boolean;
   setCompleted: (value: boolean) => Promise<void>;
   checkStatus: () => Promise<void>;
+  logout: () => Promise<void>; // Add this
 }
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
@@ -16,7 +17,6 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   setCompleted: async (value) => {
     await SecureStore.setItemAsync(ONBOARDING_KEY, JSON.stringify(value));
     set({ hasCompleted: value });
-    // TODO (V2): Trigger JWT Auth Flow here as per PDF Sprint 1 spec
   },
   checkStatus: async () => {
     try {
@@ -25,5 +25,11 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
     } catch (error) {
       set({ isLoading: false });
     }
+  },
+  logout: async () => {
+    // Clear onboarding flag
+    await SecureStore.deleteItemAsync(ONBOARDING_KEY);
+    // TODO (V2): Clear user auth token here
+    set({ hasCompleted: false });
   },
 }));
