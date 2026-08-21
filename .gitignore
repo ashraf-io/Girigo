@@ -7,3 +7,29 @@ node_modules/
 
 expo-env.d.ts
 # @end expo-cli
+# ==========================================
+# Test Coverage & Build Artifacts
+# ==========================================
+coverage/
+.nyc_output/
+web-build/
+
+# ==========================================
+# Expo / React Native
+# ==========================================
+.expo/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# ==========================================
+# Logs & OS
+# ==========================================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
