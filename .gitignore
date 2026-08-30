@@ -33,3 +33,7 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 Thumbs.db
+
+# Build artifacts and coverage
+coverage/
+*.zip
