@@ -1,6 +1,8 @@
 import { getDatabase } from '../../db/database';
 import * as Crypto from 'expo-crypto';
 
+const checkExpireTimeout: NodeJS.Timeout | null = null; // reserved for future debounce
+
 export interface Wish {
   id: string;
   title: string;
@@ -17,6 +19,7 @@ export interface Wish {
 }
 
 export const WishRepository = {
+
   async checkAndExpireWishes(): Promise<void> {
     try {
       const db = await getDatabase();

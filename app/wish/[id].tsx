@@ -21,9 +21,6 @@ export default function WishDetailScreen() {
   const [showExtensionModal, setShowExtensionModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [hasShownExpiredAlert, setHasShownExpiredAlert] = useState(false);
-  
-  // Ref to track if we're currently showing an alert (prevents double-triggering)
-  const isShowingAlert = useRef(false);
 
   // Edit state
   const [editTitle, setEditTitle] = useState('');
@@ -35,7 +32,6 @@ export default function WishDetailScreen() {
       const fetchData = async () => {
         setIsLoading(true);
         setHasShownExpiredAlert(false); // Reset flag when screen focuses
-        isShowingAlert.current = false;
         
         try {
           const fetchedWish = await WishRepository.getById(id as string);
@@ -60,13 +56,12 @@ export default function WishDetailScreen() {
     }, [id, router])
   );
 
-  // Handle expired wishes ONCE
+  // Handle expired wishes ONCE - shows alert only once per screen mount
   useEffect(() => {
     if (wish && !isEditing && wish.status === 'active') {
       const isExpired = new Date(wish.deadline) < new Date();
       
-      if (isExpired && !hasShownExpiredAlert && !isShowingAlert.current) {
-        isShowingAlert.current = true;
+      if (isExpired && !hasShownExpiredAlert) {
         setHasShownExpiredAlert(true);
         
         // Small delay to ensure UI is ready
@@ -121,7 +116,6 @@ export default function WishDetailScreen() {
       setWish({ ...wish, deadline: newDeadline.toISOString() });
       setEditDeadline(newDeadline);
       setShowExtensionModal(false);
-      isShowingAlert.current = false; // Reset flag
       Alert.alert('Success', `Deadline extended by ${hours >= 24 ? hours / 24 + ' day(s)' : hours + ' hour(s)'}.`);
     } catch (error) {
       Alert.alert('Error', 'Failed to extend deadline.');
@@ -145,7 +139,6 @@ export default function WishDetailScreen() {
 
       setWish({ ...wish, deadline: newDate.toISOString() });
       setShowExtensionModal(false);
-      isShowingAlert.current = false; // Reset flag
       Alert.alert('Success', `Deadline extended to ${newDate.toLocaleString()}.`);
     } catch (error) {
       Alert.alert('Error', 'Failed to extend deadline.');
@@ -158,12 +151,11 @@ export default function WishDetailScreen() {
       'This wish has expired. What would you like to do?',
       [
         { text: 'Mark Complete', onPress: handleComplete },
-        { 
+{ 
           text: 'Extend Deadline', 
           onPress: () => {
             setShowExtensionModal(true);
-            isShowingAlert.current = false;
-          } 
+           } 
         },
         { text: 'Abandon', style: 'destructive', onPress: handleAbandon },
       ],
@@ -175,8 +167,7 @@ export default function WishDetailScreen() {
   useEffect(() => {
     return () => {
       setShowDatePicker(false);
-      isShowingAlert.current = false;
-      hasShownExpiredAlert = false;
+      setHasShownExpiredAlert(false);
     };
   }, []);
 
@@ -199,7 +190,6 @@ export default function WishDetailScreen() {
 
   const handleComplete = async () => {
     if (!wish) return;
-    isShowingAlert.current = false; // Reset flag
     
     Alert.alert('Mark Complete', 'Are you sure you want to mark this wish as complete? You will earn XP!', [
       { text: 'Cancel', style: 'cancel' },
@@ -224,7 +214,6 @@ export default function WishDetailScreen() {
 
   const handleAbandon = () => {
     if (!wish) return;
-    isShowingAlert.current = false; // Reset flag
     
     Alert.alert('Abandon Wish', 'Are you sure you want to abandon this wish? This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
@@ -423,7 +412,6 @@ export default function WishDetailScreen() {
               style={styles.modalCancelButton}
               onPress={() => {
                 setShowExtensionModal(false);
-                isShowingAlert.current = false;
               }}
             >
               <Text style={styles.modalCancelText}>Cancel</Text>

@@ -7,11 +7,13 @@ import { WishRepository, Wish } from '../../src/modules/wish/wish.repository';
 import { GamificationService, GamificationStats } from '../../src/modules/gamification/gamification.service';
 import { TimeRing } from '../../src/components/common/TimeRing';
 
-// Memoized wish card component to prevent unnecessary re-renders
+// Fixed memoized wish card component
 const WishCard = memo(({ item, onPress }: { item: Wish; onPress: () => void }) => {
-  // Memoize time calculations
+  // Use stable time reference - calculate once per render cycle
+  const now = useMemo(() => Date.now(), []);
+  
+  // Memoize time calculations - only recalculates when deadline changes
   const { percentage, label, isUrgent } = useMemo(() => {
-    const now = Date.now();
     const end = new Date(item.deadline).getTime();
     const total = end - now;
     const percentage = total <= 0 ? 0 : Math.round(Math.min(100, Math.max(0, (total / 604800000) * 100)));
@@ -24,7 +26,7 @@ const WishCard = memo(({ item, onPress }: { item: Wish; onPress: () => void }) =
     const isUrgent = percentage <= 20;
     
     return { percentage, label, isUrgent };
-  }, [item.deadline]);
+  }, [now, item.deadline]);
 
   return (
     <TouchableOpacity 
