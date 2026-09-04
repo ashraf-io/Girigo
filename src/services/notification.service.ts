@@ -1,40 +1,72 @@
-import { Platform, Alert } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import { getDatabase } from '../db/database';
 
-// Graceful degradation for Expo Go SDK 53+ limitations
+// Configure notification appearance
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: false,
+  }),
+});
+
 export async function requestNotificationPermission(): Promise<boolean> {
   try {
-    const Notifications = await import('expo-notifications');
-    
-    // Move handler inside try/catch to prevent top-level Expo Go crash
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
-    });
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
 
-    const current = await Notifications.getPermissionsAsync();
-    if (current.granted) return true;
-    const requested = await Notifications.requestPermissionsAsync();
-    return requested.granted;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync({
+        android: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+          allowDisplayInCarPlay: false,
+          allowCriticalAlerts: true,
+        },
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+          allowDisplayInCarPlay: false,
+          allowCriticalAlerts: true,
+        },
+      });
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      return false;
+    }
+
+    // Create Android notification channel
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Girigo Reminders',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#6B2D5C',
+        sound: 'default',
+      });
+    }
+
+    return true;
   } catch (error) {
-    console.warn('Notifications require a Development Build (Expo Go limitation).');
-    Alert.alert(
-      'Dev Build Required',
-      'Local notifications are restricted in Expo Go for SDK 53+. This feature is fully implemented and will work in the V2 Development Build.'
-    );
+    console.warn('Notification permission failed:', error);
     return false;
   }
 }
 
 export async function scheduleWishDeadlineReminders(
   wishId: string,
-  title: string,
-  deadlineIso: string
+  wishTitle: string,
+  deadlineIso: string,
+  userName?: string
 ): Promise<{ dayBeforeId: string | null; hourBeforeId: string | null }> {
   try {
-    const Notifications = await import('expo-notifications');
     const hasPermission = await requestNotificationPermission();
     if (!hasPermission) return { dayBeforeId: null, hourBeforeId: null };
 
@@ -47,43 +79,54 @@ export async function scheduleWishDeadlineReminders(
     let dayBeforeId: string | null = null;
     let hourBeforeId: string | null = null;
 
-    // Only schedule if the trigger time is in the future
+    const greeting = userName ? `Hey ${userName},` : 'Reminder:';
+
     if (dayBeforeDate.getTime() > now) {
       dayBeforeId = await Notifications.scheduleNotificationAsync({
-        content: { title: "Your wish is waiting", body: `"${title}" is due in 24 hours.`, data: { wishId } },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: dayBeforeDate },
+        content: {
+          title: `${greeting} Your wish is waiting!`,
+          body: `"${wishTitle}" is due in 24 hours. Keep going! 💪`,
+          data: { wishId, type: 'deadline_reminder' },
+          sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: dayBeforeDate,
+          channelId: 'default',
+        },
       });
     }
 
     if (hourBeforeDate.getTime() > now) {
       hourBeforeId = await Notifications.scheduleNotificationAsync({
-        content: { title: "Time is running out!", body: `Your deadline for "${title}" is in 1 hour.`, data: { wishId } },
-        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: hourBeforeDate },
+        content: {
+          title: `${greeting} Time is running out!`,
+          body: `Your deadline for "${wishTitle}" is in 1 hour. Finish strong! 🔥`,
+          data: { wishId, type: 'urgent_reminder' },
+          sound: 'default',
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: hourBeforeDate,
+          channelId: 'default',
+        },
       });
     }
 
     return { dayBeforeId, hourBeforeId };
   } catch (error) {
-    console.warn('Notification scheduling skipped (Expo Go limitation).');
+    console.warn('Notification scheduling failed:', error);
     return { dayBeforeId: null, hourBeforeId: null };
   }
 }
 
-export async function scheduleDailyStreakReminder(hour: number = 20, minute: number = 0): Promise<string | null> {
+export async function cancelAllNotifications(): Promise<void> {
   try {
-    const Notifications = await import('expo-notifications');
-    const hasPermission = await requestNotificationPermission();
-    if (!hasPermission) return null;
-
-    const id = await Notifications.scheduleNotificationAsync({
-      content: { title: "Don't break the chain!", body: "Log your progress today to keep your streak alive." },
-      trigger: Platform.OS === "ios"
-        ? { type: Notifications.SchedulableTriggerInputTypes.CALENDAR, hour, minute, repeats: true }
-        : { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute },
-    });
-    return id;
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log('✅ All notifications cancelled');
   } catch (error) {
-    console.warn('Daily reminder scheduling skipped (Expo Go limitation).');
-    return null;
+    console.error('Failed to cancel notifications:', error);
   }
 }

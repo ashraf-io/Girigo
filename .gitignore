@@ -2,7 +2,7 @@
 
 # dependencies
 node_modules/
-
+firebase-service-account.json
 # Expo
 .expo/
 dist/
@@ -41,3 +41,5 @@ app-example
 # generated native folders
 /ios
 /android
+firebase-service-account.json
+firebase-service-account.json.json

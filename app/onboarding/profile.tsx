@@ -1,11 +1,13 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert } from 'react-native';
+import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors } from '../../src/theme/colors';
 import { getDatabase } from '../../src/db/database';
 import { useOnboardingStore } from '../../src/store/useOnboardingStore';
-import * as Crypto from 'expo-crypto';
+import { Colors } from '../../src/theme/colors';
+
+import { TelemetryService } from '../../src/services/telemetry.service';
 
 const AVATARS = ['🦊', '🐼', '🦁', '🐯', '🦄', '🐲', '🦋', '🐺', '🦅', '🐙', '🐨', '🐸'];
 interface User {
@@ -61,6 +63,9 @@ export default function ProfileScreen() {
       // 2. Log the user in
       await setCompleted(true, userId);
       router.replace('/(tabs)');
+
+      // After successful user creation/login
+await TelemetryService.initializeUser(userId, trimmedName);
       
     } catch (error) {
       console.error('Failed to process login:', error);

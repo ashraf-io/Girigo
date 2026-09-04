@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, memo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, SectionList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Flame, Trophy, Target, Zap, Plus } from 'lucide-react-native';
@@ -8,7 +8,7 @@ import { WishRepository, Wish } from '../../src/modules/wish/wish.repository';
 import { GamificationService, GamificationStats } from '../../src/modules/gamification/gamification.service';
 import { TimeRing } from '../../src/components/common/TimeRing';
 import { useOnboardingStore } from '../../src/store/useOnboardingStore';
-import { useCountdown } from '../../src/hooks/useCountdown'; // ✅ Added
+import { useCountdown } from '../../src/hooks/useCountdown';
 
 const FloatingActionButton = ({ onPress }: { onPress: () => void }) => (
   <TouchableOpacity style={styles.fab} onPress={onPress} activeOpacity={0.8}>
@@ -16,40 +16,28 @@ const FloatingActionButton = ({ onPress }: { onPress: () => void }) => (
   </TouchableOpacity>
 );
 
-// ✅ UPDATED: Uses live countdown hook
 const WishCard = memo(({ item, onPress }: { item: Wish; onPress: () => void }) => {
   const { timeLeft, percentage } = useCountdown(item.deadline, item.createdAt);
-  
   const isExpired = timeLeft.total <= 0;
   const isUrgent = timeLeft.total > 0 && timeLeft.total < (24 * 60 * 60 * 1000);
 
-  const label = isExpired 
-    ? 'EXPIRED' 
-    : timeLeft.days > 0 
-      ? `${timeLeft.days}d` 
-      : timeLeft.hours > 0 
-        ? `${timeLeft.hours}h` 
-        : `${timeLeft.minutes}m`;
+  const label = isExpired ? 'EXPIRED' : timeLeft.days > 0 ? `${timeLeft.days}d` : timeLeft.hours > 0 ? `${timeLeft.hours}h` : `${timeLeft.minutes}m`;
 
   return (
-    <TouchableOpacity style={[styles.wishCard, isUrgent && styles.wishCardUrgent]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.wishCard, isUrgent && styles.wishCardUrgent, isExpired && styles.wishCardExpired]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.wishContent}>
         <View style={styles.wishHeader}>
           <Text style={styles.wishTitle} numberOfLines={1}>{item.title}</Text>
           <Text style={[styles.wishPriority, isUrgent ? { color: Colors.crimson[400] } : { color: Colors.ghostMuted }]}>
-            {item.priority.toUpperCase()}
+            {isExpired ? 'EXPIRED' : (item.priority || 'MEDIUM').toUpperCase()}
           </Text>
         </View>
         <Text style={styles.wishCategory}>{item.category}</Text>
-        {item.commitment && (
-          <Text style={styles.wishCommitment} numberOfLines={1}>"{item.commitment}"</Text>
-        )}
       </View>
       <TimeRing percentage={percentage} label={label} size={48} isExpired={isExpired} />
     </TouchableOpacity>
   );
 });
-
 WishCard.displayName = 'WishCard';
 
 export default function DashboardScreen() {
@@ -77,6 +65,8 @@ export default function DashboardScreen() {
     }
   }, [currentUserId]);
 
+  
+
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
   const getLevelTitle = (level: number) => {
@@ -89,6 +79,32 @@ export default function DashboardScreen() {
     const xpForNextLevel = (500 * level * (level + 1)) / 2;
     const progress = ((xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100;
     return { current: xp, next: xpForNextLevel, percentage: Math.min(100, Math.max(0, progress)) };
+  };
+
+  // ✅ GROUP WISHES BY DYNAMIC PRIORITY
+  const getGroupedWishes = () => {
+    const urgent: Wish[] = [];
+    const upcoming: Wish[] = [];
+    const later: Wish[] = [];
+    const now = Date.now();
+
+    wishes.forEach(wish => {
+      const diff = new Date(wish.deadline).getTime() - now;
+      const hours = diff / (1000 * 60 * 60);
+      
+      if (hours <= 24) urgent.push(wish);
+      else if (hours <= 168) upcoming.push(wish); // 168 hours = 7 days
+      else later.push(wish);
+    });
+
+    // Sort each section by deadline (soonest first)
+    const sortByDeadline = (a: Wish, b: Wish) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+    
+    return [
+      { title: 'Urgent', data: urgent.sort(sortByDeadline), color: Colors.crimson[500], icon: '🔥' },
+      { title: 'Upcoming', data: upcoming.sort(sortByDeadline), color: Colors.mystic[500], icon: '📅' },
+      { title: 'Later', data: later.sort(sortByDeadline), color: Colors.ethereal[500], icon: '🔮' },
+    ].filter(section => section.data.length > 0); // Only show sections that have tasks
   };
 
   const renderHeader = () => {
@@ -136,35 +152,41 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.xpTrack}><View style={[styles.xpFill, { width: `${xpData.percentage}%` }]}><View style={styles.xpShimmer} /></View></View>
         </View>
-        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Active Wishes</Text></View>
       </View>
     );
   };
 
-  const renderWish = useCallback(({ item }: { item: Wish }) => (
-    <WishCard item={item} onPress={() => router.push(`/wish/${item.id}`)} />
-  ), [router]);
+  const sections = getGroupedWishes();
 
   return (
     <SafeAreaView style={styles.safeContainer} edges={['top']}>
-      <FlatList
-        data={wishes}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => item.id}
-        renderItem={renderWish}
+        renderItem={({ item }) => (
+          <WishCard item={item} onPress={() => router.push(`/wish/${item.id}`)} />
+        )}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionIcon}>{section.icon}</Text>
+            <Text style={[styles.sectionTitle, { color: section.color }]}>{section.title}</Text>
+            <View style={styles.sectionCountBadge}>
+              <Text style={styles.sectionCountText}>{section.data.length}</Text>
+            </View>
+          </View>
+        )}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        windowSize={5}
-        maxToRenderPerBatch={3}
-        removeClippedSubviews={true}
-        initialNumToRender={5}
-        ListEmptyComponent={!isLoading && wishes.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📜</Text>
-            <Text style={styles.emptyText}>No active wishes.</Text>
-            <Text style={styles.emptySubtext}>Tap '+' to inscribe your first pact.</Text>
-          </View>
-        ) : null}
+        stickySectionHeadersEnabled={true}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>📜</Text>
+              <Text style={styles.emptyText}>No active wishes.</Text>
+              <Text style={styles.emptySubtext}>Tap '+' to inscribe your first pact.</Text>
+            </View>
+          ) : null
+        }
       />
       <FloatingActionButton onPress={() => router.push('/create')} />
     </SafeAreaView>
@@ -199,18 +221,39 @@ const styles = StyleSheet.create({
   xpTrack: { height: 8, backgroundColor: Colors.abyss, borderRadius: 4, overflow: 'hidden' },
   xpFill: { height: '100%', backgroundColor: Colors.mystic[500], borderRadius: 4, position: 'relative' },
   xpShimmer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(255, 255, 255, 0.2)', transform: [{ skewX: '-20deg' }] },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  sectionTitle: { fontFamily: 'Inter-Bold', fontSize: 18, color: Colors.ghost },
+  
+  // Section List Styles
   listContent: { paddingBottom: 100 },
-  wishCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.abyss2, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: Colors.mystic[500] + '30', marginHorizontal: 20 },
+  sectionHeaderRow: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginTop: 24, 
+    marginBottom: 12, 
+    paddingHorizontal: 20 
+  },
+  sectionIcon: { fontSize: 16, marginRight: 8 },
+  sectionTitle: { fontFamily: 'Inter-ExtraBold', fontSize: 18, flex: 1 },
+  sectionCountBadge: { 
+    backgroundColor: Colors.abyss2, 
+    paddingHorizontal: 10, 
+    paddingVertical: 4, 
+    borderRadius: 12, 
+    borderWidth: 1, 
+    borderColor: Colors.mystic[500] + '30' 
+  },
+  sectionCountText: { fontFamily: 'JetBrainsMono-Bold', fontSize: 12, color: Colors.ghost },
+
+  // Wish Card Styles
+  wishCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.abyss2, borderRadius: 16, padding: 16, marginHorizontal: 20, marginBottom: 12, borderWidth: 1, borderColor: Colors.mystic[500] + '30' },
   wishCardUrgent: { borderColor: Colors.crimson[500], shadowColor: Colors.crimson[500], shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  wishCardExpired: { borderColor: Colors.ghostMuted, opacity: 0.8 },
   wishContent: { flex: 1, marginRight: 16 },
   wishHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   wishTitle: { fontFamily: 'Inter-Bold', fontSize: 16, color: Colors.ghost, flex: 1, marginRight: 8 },
   wishPriority: { fontFamily: 'JetBrainsMono-Regular', fontSize: 10, textTransform: 'uppercase' },
-  wishCategory: { fontSize: 12, color: Colors.ethereal[400], fontFamily: 'Inter-Bold', textTransform: 'capitalize', marginBottom: 6 },
-  wishCommitment: { fontSize: 12, color: Colors.ghostDim, fontStyle: 'italic' },
-  emptyState: { alignItems: 'center', paddingVertical: 48, paddingHorizontal: 32 },
+  wishCategory: { fontSize: 12, color: Colors.ethereal[400], fontFamily: 'Inter-Bold', textTransform: 'capitalize' },
+  
+  emptyState: { alignItems: 'center', paddingVertical: 48, marginTop: 40, paddingHorizontal: 32 },
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyText: { fontFamily: 'Inter-Bold', fontSize: 18, color: Colors.ghost, marginBottom: 4 },
   emptySubtext: { fontFamily: 'Inter-Regular', fontSize: 14, color: Colors.ghostMuted, textAlign: 'center' },

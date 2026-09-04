@@ -9,6 +9,8 @@ import { useOnboardingStore } from '../../src/store/useOnboardingStore';
 import * as Haptics from 'expo-haptics';
 import { scheduleWishDeadlineReminders } from '../../src/services/notification.service';
 
+import { TelemetryService } from '../../src/services/telemetry.service';
+
 const CATEGORIES = [
   { id: 'academic', label: '📚 Academic' },
   { id: 'health', label: '💪 Health' },
@@ -25,8 +27,6 @@ export default function CreateWishScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('academic');
-  const [priority, setPriority] = useState('medium');
-  const [commitment, setCommitment] = useState('');
   const [deadlineDate, setDeadlineDate] = useState(new Date());
   const [showPicker, setShowPicker] = useState(false);
   const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
@@ -35,7 +35,7 @@ export default function CreateWishScreen() {
   
   const [useQuickAdd, setUseQuickAdd] = useState(false);
   const [quickAddHours, setQuickAddHours] = useState<number | null>(null);
-  const [manualDuration, setManualDuration] = useState(''); // ✅ Added
+  const [manualDuration, setManualDuration] = useState('');
 
   const parseDuration = (text: string): number => {
     let totalMs = 0;
@@ -48,7 +48,7 @@ export default function CreateWishScreen() {
     if (minutes) totalMs += parseInt(minutes[1]) * 60 * 1000;
     
     if (!days && !hours && !minutes && text.trim() && !isNaN(parseFloat(text))) {
-      totalMs = parseFloat(text) * 60 * 60 * 1000; // Assume hours if just a number
+      totalMs = parseFloat(text) * 60 * 60 * 1000;
     }
     return totalMs;
   };
@@ -74,19 +74,41 @@ export default function CreateWishScreen() {
     
     const finalCategory = category === 'custom' ? customCategory.trim() : category;
     if (!finalCategory) { Alert.alert('Missing Category', 'Please enter a category.'); return; }
-    if (priority === 'high' && !commitment.trim()) { Alert.alert('Commitment Required', 'High priority requires a commitment.'); return; }
 
     setIsSaving(true);
     try {
+      // ✅ AUTO-CALCULATE PRIORITY BASED ON DEADLINE
+      const hoursUntilDeadline = (deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60);
+      let autoPriority = 'low'; // Later (> 7 days)
+      if (hoursUntilDeadline <= 24) {
+        autoPriority = 'high'; // Urgent (<= 24h)
+      } else if (hoursUntilDeadline <= 168) {
+        autoPriority = 'medium'; // Upcoming (1 to 7 days)
+      }
+
       const createdWish = await WishRepository.create(currentUserId, {
-        title: title.trim(), description: description.trim() || null, category: finalCategory,
-        priority, deadline: deadlineDate.toISOString(), status: 'active', progress: 0,
-        commitment: priority === 'high' ? commitment.trim() : null,
+        title: title.trim(), 
+        description: description.trim() || null, 
+        category: finalCategory,
+        priority: autoPriority, // Dynamically set!
+        deadline: deadlineDate.toISOString(), 
+        status: 'active', 
+        progress: 0,
+        commitment: null, // No longer needed
       });
+
+      // After successful creation
+await TelemetryService.logWishCreated({
+  title: createdWish.title,
+  category: createdWish.category,
+  priority: createdWish.priority,
+  deadline: createdWish.deadline,
+});
+
       await scheduleWishDeadlineReminders(createdWish.id, createdWish.title, createdWish.deadline);
       try { await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); } catch (e) {}
       
-      setTitle(''); setDescription(''); setCommitment(''); setCustomCategory('');
+      setTitle(''); setDescription(''); setCustomCategory('');
       setDeadlineDate(new Date()); setUseQuickAdd(false); setQuickAddHours(null); setManualDuration('');
       setIsSaving(false);
       router.replace('/(tabs)');
@@ -114,21 +136,6 @@ export default function CreateWishScreen() {
         </View>
         {category === 'custom' && (
           <TextInput style={styles.input} placeholder="Enter custom category" placeholderTextColor={Colors.ghostDim} value={customCategory} onChangeText={setCustomCategory} editable={!isSaving} />
-        )}
-
-        <Text style={styles.label}>Priority</Text>
-        <View style={styles.chipRow}>
-          {['low', 'medium', 'high'].map((p) => (
-            <TouchableOpacity key={p} style={[styles.chip, priority === p && (p === 'high' ? styles.chipHigh : styles.chipActive)]} onPress={() => setPriority(p)} disabled={isSaving}>
-              <Text style={[styles.chipText, priority === p && styles.chipTextActive]}>{p === 'high' ? '🔥 High' : p === 'medium' ? '⚡ Medium' : '🌱 Low'}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        {priority === 'high' && (
-          <View style={styles.commitmentBox}>
-            <Text style={styles.commitmentLabel}>📜 Your Commitment (Required)</Text>
-            <TextInput style={styles.commitmentInput} placeholder="What are you willing to sacrifice?" placeholderTextColor={Colors.ghostDim} value={commitment} onChangeText={setCommitment} multiline editable={!isSaving} />
-          </View>
         )}
 
         <Text style={styles.label}>Deadline</Text>
@@ -159,7 +166,6 @@ export default function CreateWishScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-            {/* ✅ Manual Duration Input */}
             <Text style={styles.subLabel}>Or type duration (e.g., 1d 2h 30m):</Text>
             <View style={styles.manualInputRow}>
               <TextInput style={styles.manualInput} placeholder="1d 2h" placeholderTextColor={Colors.ghostDim} value={manualDuration} onChangeText={(text) => { setManualDuration(text); const ms = parseDuration(text); if (ms > 0) { setDeadlineDate(new Date(Date.now() + ms)); setQuickAddHours(null); } }} editable={!isSaving} />
@@ -191,12 +197,8 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: Colors.abyss2, borderWidth: 1, borderColor: Colors.mystic[500] + '30' },
   chipActive: { backgroundColor: Colors.mystic[500] + '30', borderColor: Colors.mystic[500] },
-  chipHigh: { backgroundColor: Colors.crimson[500] + '20', borderColor: Colors.crimson[500] },
   chipText: { fontFamily: 'Inter-Bold', fontSize: 14, color: Colors.ghostMuted },
   chipTextActive: { color: Colors.ghost },
-  commitmentBox: { backgroundColor: Colors.crimson[500] + '10', borderWidth: 1, borderColor: Colors.crimson[500] + '40', borderRadius: 12, padding: 16, marginBottom: 16 },
-  commitmentLabel: { fontFamily: 'Inter-Bold', fontSize: 14, color: Colors.crimson[400], marginBottom: 8 },
-  commitmentInput: { color: Colors.ghost, fontFamily: 'Inter-Regular', fontSize: 14, fontStyle: 'italic' },
   quickAddToggle: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   toggleButton: { flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: Colors.abyss2, borderWidth: 1, borderColor: Colors.mystic[500] + '30', alignItems: 'center' },
   toggleButtonActive: { backgroundColor: Colors.mystic[500] + '30', borderColor: Colors.mystic[500] },
