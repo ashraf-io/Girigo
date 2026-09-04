@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
-import { Target, User, Archive, Plus } from 'lucide-react-native';
+// import { Target, User, Archive, Plus } from 'lucide-react-native';
+import { Target, User, Archive, TrendingUp } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -25,6 +26,14 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <Target color={color} size={size} /> 
         }} 
       />
+       {/* ✅ NEW 4th TAB */}
+      <Tabs.Screen 
+        name="progress" 
+        options={{ 
+          title: 'Progress', 
+          tabBarIcon: ({ color, size }) => <TrendingUp color={color} size={size} /> 
+        }} 
+      />
       <Tabs.Screen 
         name="history" 
         options={{ 
@@ -32,6 +41,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <Archive color={color} size={size} /> 
         }} 
       />
+     
       <Tabs.Screen 
         name="profile" 
         options={{ 
