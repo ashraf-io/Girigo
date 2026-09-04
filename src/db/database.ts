@@ -37,48 +37,67 @@ const initializeDatabase = async (db: SQLite.SQLiteDatabase) => {
   try {
     await db.execAsync('PRAGMA journal_mode = WAL;');
 
+    // 1. Users table (name is UNIQUE for easy login)
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY, name TEXT NOT NULL, avatar TEXT NOT NULL, createdAt INTEGER NOT NULL
+        id TEXT PRIMARY KEY, 
+        name TEXT UNIQUE NOT NULL, 
+        avatar TEXT NOT NULL, 
+        createdAt INTEGER NOT NULL
       )
     `);
 
+    // 2. Gamification stats keyed by userId
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS gamification_stats (
-        id TEXT PRIMARY KEY CHECK (id = 'me'),
-        xp INTEGER DEFAULT 0, level INTEGER DEFAULT 1, currentStreak INTEGER DEFAULT 0,
-        longestStreak INTEGER DEFAULT 0, lastActivityDate TEXT, notificationsEnabled INTEGER DEFAULT 1,
-        dailyReminderId TEXT
+        userId TEXT PRIMARY KEY,
+        xp INTEGER DEFAULT 0, 
+        level INTEGER DEFAULT 1, 
+        currentStreak INTEGER DEFAULT 0,
+        longestStreak INTEGER DEFAULT 0, 
+        lastActivityDate TEXT, 
+        notificationsEnabled INTEGER DEFAULT 1,
+        dailyReminderId TEXT,
+        FOREIGN KEY (userId) REFERENCES users(id)
       )
     `);
-    
-    // Safe migration: add column if it doesn't exist
-    try {
-      await db.execAsync(`ALTER TABLE gamification_stats ADD COLUMN dailyReminderId TEXT`);
-    } catch (e) { /* Column already exists, ignore */ }
 
-    await db.runAsync('INSERT OR IGNORE INTO gamification_stats (id) VALUES (?)', ['me']);
-
+    // 3. Wishes table with userId
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS wishes (
-        id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT, category TEXT NOT NULL,
-        priority TEXT NOT NULL, deadline TEXT NOT NULL, status TEXT DEFAULT 'active',
-        progress INTEGER DEFAULT 0, xpEarned INTEGER DEFAULT 0, commitment TEXT,
-        createdAt INTEGER NOT NULL, completedAt INTEGER
+        id TEXT PRIMARY KEY, 
+        userId TEXT NOT NULL,
+        title TEXT NOT NULL, 
+        description TEXT, 
+        category TEXT NOT NULL,
+        priority TEXT NOT NULL, 
+        deadline TEXT NOT NULL, 
+        status TEXT DEFAULT 'active',
+        progress INTEGER DEFAULT 0, 
+        xpEarned INTEGER DEFAULT 0, 
+        commitment TEXT,
+        createdAt INTEGER NOT NULL, 
+        completedAt INTEGER,
+        FOREIGN KEY (userId) REFERENCES users(id)
       )
     `);
 
+    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_user ON wishes(userId)`);
     await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_status ON wishes(status)`);
     await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_deadline ON wishes(deadline)`);
-    await db.execAsync(`CREATE INDEX IF NOT EXISTS idx_wishes_category ON wishes(category)`);
 
+    // 4. Activity log with userId
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS activity_log (
-        date TEXT PRIMARY KEY, actionCount INTEGER DEFAULT 1
+        userId TEXT NOT NULL,
+        date TEXT NOT NULL, 
+        actionCount INTEGER DEFAULT 1,
+        PRIMARY KEY (userId, date),
+        FOREIGN KEY (userId) REFERENCES users(id)
       )
     `);
 
-    console.log('✅ Girigo Database Initialized Successfully');
+    console.log('✅ Girigo Database Initialized with Multi-User Support');
   } catch (error) {
     console.error('❌ Database table creation failed:', error);
     throw error;

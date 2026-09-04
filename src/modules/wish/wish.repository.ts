@@ -3,6 +3,7 @@ import * as Crypto from 'expo-crypto';
 
 export interface Wish {
   id: string;
+  userId: string;
   title: string;
   description: string | null;
   category: string;
@@ -17,31 +18,27 @@ export interface Wish {
 }
 
 export const WishRepository = {
-  async checkAndExpireWishes(): Promise<void> {
+  async checkAndExpireWishes(userId: string): Promise<void> {
     try {
       const db = await getDatabase();
       const now = new Date().toISOString();
       const result = await db.runAsync(
-        "UPDATE wishes SET status = 'expired' WHERE status = 'active' AND deadline < ?",
-        [now]
+        "UPDATE wishes SET status = 'expired' WHERE status = 'active' AND deadline < ? AND userId = ?",
+        [now, userId]
       );
-      if (result.changes > 0) {
-        console.log(`🔄 Auto-expired ${result.changes} wish(es)`);
-      }
-    } catch (error) {
-      console.error('Error checking expired wishes:', error);
-    }
+      if (result.changes > 0) console.log(`🔄 Auto-expired ${result.changes} wish(es)`);
+    } catch (error) { console.error('Error checking expired wishes:', error); }
   },
 
-  async getAll(statusFilter?: string): Promise<Wish[]> {
+  async getAll(userId: string, statusFilter?: string): Promise<Wish[]> {
     try {
-      await this.checkAndExpireWishes();
+      await this.checkAndExpireWishes(userId);
       const db = await getDatabase();
-      let query = 'SELECT * FROM wishes';
-      let params: any[] = [];
+      let query = 'SELECT * FROM wishes WHERE userId = ?';
+      let params: any[] = [userId];
       
       if (statusFilter && statusFilter !== 'all') {
-        query += ' WHERE status = ?';
+        query += ' AND status = ?';
         params.push(statusFilter);
       }
       
@@ -54,10 +51,10 @@ export const WishRepository = {
     }
   },
 
-  async getById(id: string): Promise<Wish | null> {
+  async getById(userId: string, id: string): Promise<Wish | null> {
     try {
       const db = await getDatabase();
-      const wish = await db.getFirstAsync('SELECT * FROM wishes WHERE id = ?', [id]);
+      const wish = await db.getFirstAsync('SELECT * FROM wishes WHERE id = ? AND userId = ?', [id, userId]);
       return wish as Wish | null;
     } catch (error) {
       console.error('Error fetching wish by ID:', error);
@@ -65,72 +62,43 @@ export const WishRepository = {
     }
   },
 
-  async create(wish: Omit<Wish, 'id' | 'createdAt' | 'completedAt' | 'xpEarned'>): Promise<Wish> {
+  async create(userId: string, wish: Omit<Wish, 'id' | 'userId' | 'createdAt' | 'completedAt' | 'xpEarned'>): Promise<Wish> {
     try {
       const db = await getDatabase();
       const id = Crypto.randomUUID();
       const createdAt = Date.now();
 
       await db.runAsync(
-        `INSERT INTO wishes (id, title, description, category, priority, deadline, status, progress, xpEarned, commitment, createdAt) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, wish.title, wish.description, wish.category, wish.priority, wish.deadline, wish.status, wish.progress, 0, wish.commitment, createdAt]
+        `INSERT INTO wishes (id, userId, title, description, category, priority, deadline, status, progress, xpEarned, commitment, createdAt) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, userId, wish.title, wish.description, wish.category, wish.priority, wish.deadline, wish.status, wish.progress, 0, wish.commitment, createdAt]
       );
 
-      return { ...wish, id, createdAt, completedAt: null, xpEarned: 0 } as Wish;
+      return { ...wish, id, userId, createdAt, completedAt: null, xpEarned: 0 } as Wish;
     } catch (error) {
       console.error('Error creating wish:', error);
       throw error;
     }
   },
 
-  async updateProgress(id: string, progress: number): Promise<void> {
+  async updateProgress(userId: string, id: string, progress: number): Promise<void> {
     try {
       const db = await getDatabase();
-      await db.runAsync('UPDATE wishes SET progress = ? WHERE id = ?', [progress, id]);
-    } catch (error) {
-      console.error('Error updating progress:', error);
-    }
+      await db.runAsync('UPDATE wishes SET progress = ? WHERE id = ? AND userId = ?', [progress, id, userId]);
+    } catch (error) { console.error('Error updating progress:', error); }
   },
 
-  async updateStatus(id: string, status: string): Promise<void> {
+  async updateStatus(userId: string, id: string, status: string): Promise<void> {
     try {
       const db = await getDatabase();
-      await db.runAsync('UPDATE wishes SET status = ? WHERE id = ?', [status, id]);
-    } catch (error) {
-      console.error('Error updating status:', error);
-    }
+      await db.runAsync('UPDATE wishes SET status = ? WHERE id = ? AND userId = ?', [status, id, userId]);
+    } catch (error) { console.error('Error updating status:', error); }
   },
 
-  async complete(id: string): Promise<Wish | null> {
+  async delete(userId: string, id: string): Promise<void> {
     try {
       const db = await getDatabase();
-      const wish = (await db.getFirstAsync('SELECT * FROM wishes WHERE id = ?', [id])) as Wish | undefined;
-      if (!wish) return null;
-
-      const completedAt = Date.now();
-      const isOnTime = new Date(wish.deadline).getTime() > completedAt;
-      const xpEarned = wish.priority === 'high' ? 150 : wish.priority === 'medium' ? 100 : 50;
-      const finalXp = isOnTime ? xpEarned + 50 : xpEarned;
-
-      await db.runAsync(
-        'UPDATE wishes SET status = ?, progress = ?, xpEarned = ?, completedAt = ? WHERE id = ?',
-        ['completed', 100, finalXp, completedAt, id]
-      );
-
-      return { ...wish, status: 'completed', progress: 100, xpEarned: finalXp, completedAt } as Wish;
-    } catch (error) {
-      console.error('Error completing wish:', error);
-      return null;
-    }
-  },
-
-  async delete(id: string): Promise<void> {
-    try {
-      const db = await getDatabase();
-      await db.runAsync('DELETE FROM wishes WHERE id = ?', [id]);
-    } catch (error) {
-      console.error('Error deleting wish:', error);
-    }
+      await db.runAsync('DELETE FROM wishes WHERE id = ? AND userId = ?', [id, userId]);
+    } catch (error) { console.error('Error deleting wish:', error); }
   }
 };

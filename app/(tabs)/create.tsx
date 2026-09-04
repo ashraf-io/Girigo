@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, Platform, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Colors } from '../../src/theme/colors';
 import { WishRepository } from '../../src/modules/wish/wish.repository';
+import { useOnboardingStore } from '../../src/store/useOnboardingStore';
 import * as Haptics from 'expo-haptics';
 import { scheduleWishDeadlineReminders } from '../../src/services/notification.service';
 
@@ -18,6 +20,8 @@ const CATEGORIES = [
 
 export default function CreateWishScreen() {
   const router = useRouter();
+  const { currentUserId } = useOnboardingStore();
+  
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('academic');
@@ -31,20 +35,74 @@ export default function CreateWishScreen() {
 
   const onDateChange = (event: any, selectedDate?: Date) => {
     const currentDate = selectedDate || deadlineDate;
-    
     if (currentDate.getTime() < Date.now() - 60000) {
       Alert.alert('Invalid Date', 'Deadline cannot be in the past. Please select a future date.', [{ text: 'OK' }]);
       setDeadlineDate(new Date(Date.now() + 3600000));
       setShowPicker(false);
       return;
     }
-    
     setShowPicker(Platform.OS === 'ios');
     setDeadlineDate(currentDate);
   };
 
-  const handleSave = async () => {
+  // const handleSave = async () => {
+  //   console.log(' DEBUG - currentUserId:', currentUserId);
+  //   console.log('🔍 DEBUG - isSaving:', isSaving);
+  //   if (isSaving) return;
+  //   if (!currentUserId) {
+  //     Alert.alert('Error', 'User session not found. Please log in again.');
+  //     return;
+  //   }
+  //   if (!title.trim()) {
+  //     Alert.alert('Missing Title', 'Please enter a title for your wish.');
+  //     return;
+  //   }
+    
+  //   const finalCategory = category === 'custom' ? customCategory.trim() : category;
+  //   if (!finalCategory) {
+  //     Alert.alert('Missing Category', 'Please enter a custom category name.');
+  //     return;
+  //   }
+
+  //   if (priority === 'high' && !commitment.trim()) {
+  //     Alert.alert('Commitment Required', 'High priority wishes require a commitment statement.');
+  //     return;
+  //   }
+
+  //   setIsSaving(true);
+
+  //   try {
+  //     const createdWish = await WishRepository.create(currentUserId, {
+  //       title: title.trim(),
+  //       description: description.trim() || null,
+  //       category: finalCategory,
+  //       priority,
+  //       deadline: deadlineDate.toISOString(),
+  //       status: 'active',
+  //       progress: 0,
+  //       commitment: priority === 'high' ? commitment.trim() : null,
+  //     });
+
+  //     await scheduleWishDeadlineReminders(createdWish.id, createdWish.title, createdWish.deadline);
+      
+  //     try { 
+  //       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); 
+  //     } catch (e) {}
+      
+  //     router.replace('/(tabs)');
+  //   } catch (error) {
+  //     console.error('Error creating wish:', error);
+  //     Alert.alert('Error', 'Failed to create wish.');
+  //     setIsSaving(false);
+  //   }
+  // };
+    const handleSave = async () => {
     if (isSaving) return;
+    
+    if (!currentUserId) {
+      Alert.alert('Session Error', 'Please log out and log back in to refresh your session.');
+      return;
+    }
     
     if (!title.trim()) {
       Alert.alert('Missing Title', 'Please enter a title for your wish.');
@@ -65,7 +123,7 @@ export default function CreateWishScreen() {
     setIsSaving(true);
 
     try {
-      const createdWish = await WishRepository.create({
+      const createdWish = await WishRepository.create(currentUserId, {
         title: title.trim(),
         description: description.trim() || null,
         category: finalCategory,
@@ -84,139 +142,141 @@ export default function CreateWishScreen() {
         // Ignore haptics error in Expo Go
       }
       
-      router.replace('/(tabs)');
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Failed to create wish.');
+      // ✅ FIX: Reset the form and loading state immediately
+      setTitle('');
+      setDescription('');
+      setCommitment('');
+      setCustomCategory('');
+      setDeadlineDate(new Date());
       setIsSaving(false);
+
+      // Navigate to the Active tab
+      router.replace('/(tabs)');
+      
+    } catch (error) {
+      console.error('Error creating wish:', error);
+      Alert.alert('Error', 'Failed to create wish.');
+      setIsSaving(false); // Reset on error so they can try again
     }
   };
 
+  //   const handleSave = async () => {
+  //   if (isSaving) return;
+    
+  //   // 1. Explicitly check and reset if user ID is missing
+  //   if (!currentUserId) {
+  //     Alert.alert('Session Error', 'Please log out and log back in to refresh your session.');
+  //     return;
+  //   }
+    
+  //   if (!title.trim()) {
+  //     Alert.alert('Missing Title', 'Please enter a title for your wish.');
+  //     return;
+  //   }
+    
+  //   const finalCategory = category === 'custom' ? customCategory.trim() : category;
+  //   if (!finalCategory) {
+  //     Alert.alert('Missing Category', 'Please enter a custom category name.');
+  //     return;
+  //   }
+
+  //   if (priority === 'high' && !commitment.trim()) {
+  //     Alert.alert('Commitment Required', 'High priority wishes require a commitment statement.');
+  //     return;
+  //   }
+
+  //   setIsSaving(true); // Set to true ONLY after all validations pass
+
+  //   try {
+  //     // 2. Ensure currentUserId is passed as the FIRST argument
+  //     const createdWish = await WishRepository.create(currentUserId, {
+  //       title: title.trim(),
+  //       description: description.trim() || null,
+  //       category: finalCategory,
+  //       priority,
+  //       deadline: deadlineDate.toISOString(),
+  //       status: 'active',
+  //       progress: 0,
+  //       commitment: priority === 'high' ? commitment.trim() : null,
+  //     });
+
+  //     await scheduleWishDeadlineReminders(createdWish.id, createdWish.title, createdWish.deadline);
+      
+  //     try { 
+  //       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); 
+  //     } catch (e) {}
+      
+  //     router.replace('/(tabs)');
+  //   } catch (error) {
+  //     console.error('Error creating wish:', error);
+  //     Alert.alert('Error', 'Failed to create wish.');
+  //     setIsSaving(false); // Reset on error so they can try again
+  //   }
+  // };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.header}>Create New Wish</Text>
-      
-      <TextInput 
-        style={styles.input} 
-        placeholder="What do you want to achieve?" 
-        placeholderTextColor={Colors.ghostDim} 
-        value={title} 
-        onChangeText={setTitle} 
-        editable={!isSaving} 
-      />
-      <TextInput 
-        style={[styles.input, styles.textArea]} 
-        placeholder="Description (optional)" 
-        placeholderTextColor={Colors.ghostDim} 
-        value={description} 
-        onChangeText={setDescription} 
-        multiline 
-        numberOfLines={3} 
-        editable={!isSaving} 
-      />
-      
-      <Text style={styles.label}>Category</Text>
-      <View style={styles.chipRow}>
-        {CATEGORIES.map((cat) => (
-          <TouchableOpacity 
-            key={cat.id} 
-            style={[styles.chip, category === cat.id && styles.chipActive]} 
-            onPress={() => setCategory(cat.id)}
-            disabled={isSaving}
-          >
-            <Text style={[styles.chipText, category === cat.id && styles.chipTextActive]}>{cat.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {category === 'custom' && (
-        <TextInput
-          style={styles.input}
-          placeholder="Enter custom category (e.g., Hobbies)"
-          placeholderTextColor={Colors.ghostDim}
-          value={customCategory}
-          onChangeText={setCustomCategory}
-          editable={!isSaving}
-        />
-      )}
-
-      <Text style={styles.label}>Priority</Text>
-      <View style={styles.chipRow}>
-        {['low', 'medium', 'high'].map((p) => (
-          <TouchableOpacity 
-            key={p} 
-            style={[styles.chip, priority === p && (p === 'high' ? styles.chipHigh : styles.chipActive)]} 
-            onPress={() => setPriority(p)}
-            disabled={isSaving}
-          >
-            <Text style={[styles.chipText, priority === p && styles.chipTextActive]}>
-              {p === 'high' ? '🔥 High' : p === 'medium' ? '⚡ Medium' : '🌱 Low'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {priority === 'high' && (
-        <View style={styles.commitmentBox}>
-          <Text style={styles.commitmentLabel}>📜 Your Commitment (Required)</Text>
-          <TextInput 
-            style={styles.commitmentInput} 
-            placeholder="What are you willing to sacrifice for this?" 
-            placeholderTextColor={Colors.ghostDim} 
-            value={commitment} 
-            onChangeText={setCommitment} 
-            multiline 
-            editable={!isSaving} 
-          />
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.header}>Create New Wish</Text>
+        
+        <TextInput style={styles.input} placeholder="What do you want to achieve?" placeholderTextColor={Colors.ghostDim} value={title} onChangeText={setTitle} editable={!isSaving} />
+        <TextInput style={[styles.input, styles.textArea]} placeholder="Description (optional)" placeholderTextColor={Colors.ghostDim} value={description} onChangeText={setDescription} multiline numberOfLines={3} editable={!isSaving} />
+        
+        <Text style={styles.label}>Category</Text>
+        <View style={styles.chipRow}>
+          {CATEGORIES.map((cat) => (
+            <TouchableOpacity key={cat.id} style={[styles.chip, category === cat.id && styles.chipActive]} onPress={() => setCategory(cat.id)} disabled={isSaving}>
+              <Text style={[styles.chipText, category === cat.id && styles.chipTextActive]}>{cat.label}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      )}
 
-      <Text style={styles.label}>Deadline</Text>
-      <View style={styles.deadlineRow}>
-        <TouchableOpacity 
-          style={styles.deadlineButton} 
-          onPress={() => { setPickerMode('date'); setShowPicker(true); }}
-          disabled={isSaving}
-        >
-          <Text style={styles.deadlineButtonText}>📅 {deadlineDate.toLocaleDateString()}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.deadlineButton} 
-          onPress={() => { setPickerMode('time'); setShowPicker(true); }}
-          disabled={isSaving}
-        >
-          <Text style={styles.deadlineButtonText}>⏰ {deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {showPicker && (
-        <DateTimePicker 
-          testID="dateTimePicker" 
-          value={deadlineDate} 
-          mode={pickerMode} 
-          is24Hour={true} 
-          display="default" 
-          onChange={onDateChange} 
-          style={styles.dateTimePicker} 
-        />
-      )}
-
-      <TouchableOpacity 
-        style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} 
-        onPress={handleSave}
-        disabled={isSaving}
-      >
-        {isSaving ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Text style={styles.saveButtonText}>Save Wish</Text>
+        {category === 'custom' && (
+          <TextInput style={styles.input} placeholder="Enter custom category (e.g., Hobbies)" placeholderTextColor={Colors.ghostDim} value={customCategory} onChangeText={setCustomCategory} editable={!isSaving} />
         )}
-      </TouchableOpacity>
-    </ScrollView>
+
+        <Text style={styles.label}>Priority</Text>
+        <View style={styles.chipRow}>
+          {['low', 'medium', 'high'].map((p) => (
+            <TouchableOpacity key={p} style={[styles.chip, priority === p && (p === 'high' ? styles.chipHigh : styles.chipActive)]} onPress={() => setPriority(p)} disabled={isSaving}>
+              <Text style={[styles.chipText, priority === p && styles.chipTextActive]}>
+                {p === 'high' ? '🔥 High' : p === 'medium' ? '⚡ Medium' : '🌱 Low'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {priority === 'high' && (
+          <View style={styles.commitmentBox}>
+            <Text style={styles.commitmentLabel}>📜 Your Commitment (Required)</Text>
+            <TextInput style={styles.commitmentInput} placeholder="What are you willing to sacrifice for this?" placeholderTextColor={Colors.ghostDim} value={commitment} onChangeText={setCommitment} multiline editable={!isSaving} />
+          </View>
+        )}
+
+        <Text style={styles.label}>Deadline</Text>
+        <View style={styles.deadlineRow}>
+          <TouchableOpacity style={styles.deadlineButton} onPress={() => { setPickerMode('date'); setShowPicker(true); }} disabled={isSaving}>
+            <Text style={styles.deadlineButtonText}>📅 {deadlineDate.toLocaleDateString()}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.deadlineButton} onPress={() => { setPickerMode('time'); setShowPicker(true); }} disabled={isSaving}>
+            <Text style={styles.deadlineButtonText}>⏰ {deadlineDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showPicker && (
+          <DateTimePicker testID="dateTimePicker" value={deadlineDate} mode={pickerMode} is24Hour={true} display="default" onChange={onDateChange} style={styles.dateTimePicker} />
+        )}
+
+        <TouchableOpacity style={[styles.saveButton, isSaving && styles.saveButtonDisabled]} onPress={handleSave} disabled={isSaving}>
+          {isSaving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveButtonText}>Save Wish</Text>}
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: { flex: 1, backgroundColor: Colors.abyss },
   container: { flex: 1, backgroundColor: Colors.abyss },
   content: { padding: 24, paddingBottom: 48 },
   header: { fontFamily: 'Inter-ExtraBold', fontSize: 28, color: Colors.ghost, marginBottom: 24 },

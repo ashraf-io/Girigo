@@ -1,9 +1,11 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Archive, CheckCircle, XCircle, Clock } from 'lucide-react-native';
+import { Archive, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react-native';
 import { Colors } from '../../src/theme/colors';
 import { WishRepository, Wish } from '../../src/modules/wish/wish.repository';
+import { getDatabase } from '../../src/db/database';
 
 export default function HistoryScreen() {
   const [wishes, setWishes] = useState<Wish[]>([]);
@@ -12,7 +14,7 @@ export default function HistoryScreen() {
 
   const loadWishes = useCallback(() => {
     const fetchWishes = async () => {
-      const allWishes = await WishRepository.getAll();
+      const allWishes = await WishRepository.getAll(filter === 'all' ? undefined : filter);
       const filtered = filter === 'all' 
         ? allWishes.filter(w => w.status !== 'active')
         : allWishes.filter(w => w.status === filter);
@@ -22,6 +24,37 @@ export default function HistoryScreen() {
   }, [filter]);
 
   useFocusEffect(loadWishes);
+
+  const handleClearHistory = () => {
+    Alert.alert(
+      'Clear History',
+      `Are you sure you want to delete all ${filter === 'all' ? '' : filter} wishes? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const db = await getDatabase();
+              
+              if (filter === 'all') {
+                await db.runAsync("DELETE FROM wishes WHERE status != 'active'");
+              } else {
+                await db.runAsync('DELETE FROM wishes WHERE status = ?', [filter]);
+              }
+              
+              Alert.alert('Success', 'History cleared successfully.');
+              loadWishes();
+            } catch (error) {
+              console.error('Failed to clear history:', error);
+              Alert.alert('Error', 'Failed to clear history.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -54,43 +87,60 @@ export default function HistoryScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>History</Text>
-        <Text style={styles.headerSubtitle}>Completed, abandoned, and expired wishes</Text>
-      </View>
-
-      <View style={styles.filterRow}>
-        {(['all', 'completed', 'abandoned', 'expired'] as const).map((f) => (
-          <TouchableOpacity key={f} style={[styles.filterChip, filter === f && styles.filterChipActive]} onPress={() => setFilter(f)}>
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <FlatList
-        data={wishes}
-        keyExtractor={(item) => item.id}
-        renderItem={renderWish}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Archive color={Colors.ghostDim} size={48} />
-            <Text style={styles.emptyText}>No history yet.</Text>
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>History</Text>
+            <Text style={styles.headerSubtitle}>Completed, abandoned, and expired wishes</Text>
           </View>
-        }
-      />
-    </View>
+          {wishes.length > 0 && (
+            <TouchableOpacity style={styles.clearButton} onPress={handleClearHistory} activeOpacity={0.7}>
+              <Trash2 color={Colors.crimson[400]} size={20} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.filterRow}>
+          {(['all', 'completed', 'abandoned', 'expired'] as const).map((f) => (
+            <TouchableOpacity key={f} style={[styles.filterChip, filter === f && styles.filterChipActive]} onPress={() => setFilter(f)}>
+              <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <FlatList
+          data={wishes}
+          keyExtractor={(item) => item.id}
+          renderItem={renderWish}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Archive color={Colors.ghostDim} size={48} />
+              <Text style={styles.emptyText}>No history yet.</Text>
+            </View>
+          }
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: { flex: 1, backgroundColor: Colors.abyss },
   container: { flex: 1, backgroundColor: Colors.abyss },
-  header: { padding: 20, paddingBottom: 12 },
+  header: { padding: 20, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   headerTitle: { fontFamily: 'Inter-ExtraBold', fontSize: 28, color: Colors.ghost },
   headerSubtitle: { fontFamily: 'Inter-Regular', fontSize: 14, color: Colors.ghostMuted },
+  clearButton: { 
+    padding: 10, 
+    backgroundColor: Colors.crimson[500] + '20', 
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.crimson[500] + '40'
+  },
   filterRow: { flexDirection: 'row', paddingHorizontal: 20, gap: 8, marginBottom: 16 },
   filterChip: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: Colors.abyss2, borderWidth: 1, borderColor: Colors.mystic[500] + '30' },
   filterChipActive: { backgroundColor: Colors.mystic[500] + '30', borderColor: Colors.mystic[500] },

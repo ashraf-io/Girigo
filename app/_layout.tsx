@@ -1,7 +1,7 @@
-
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Inter_400Regular, Inter_700Bold, Inter_800ExtraBold } from '@expo-google-fonts/inter';
 import { JetBrainsMono_400Regular, JetBrainsMono_700Bold } from '@expo-google-fonts/jetbrains-mono';
 import * as SplashScreen from 'expo-splash-screen';
@@ -49,24 +49,25 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        contentStyle: { backgroundColor: Colors.abyss },
-        animation: 'fade',
-      }}
-    >
-      {!hasCompleted ? (
-        <>
-          {/* Expo Router maps app/onboarding/index.tsx to the name "onboarding" */}
-          <Stack.Screen name="onboarding" />
-          <Stack.Screen name="onboarding/profile" />
-          <Stack.Screen name="onboarding/permissions" />
-        </>
-      ) : (
-        <Stack.Screen name="(tabs)" />
-      )}
-    </Stack>
+    <SafeAreaProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: Colors.abyss },
+          animation: 'fade',
+        }}
+      >
+        {!hasCompleted ? (
+          <>
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="onboarding/profile" />
+            <Stack.Screen name="onboarding/permissions" />
+          </>
+        ) : (
+          <Stack.Screen name="(tabs)" />
+        )}
+      </Stack>
+    </SafeAreaProvider>
   );
 }
 

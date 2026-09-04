@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../src/theme/colors';
-import { useOnboardingStore } from '../../src/store/useOnboardingStore';
 
 const { width } = Dimensions.get('window');
 
@@ -27,13 +26,12 @@ const slides = [
 export default function OnboardingScreen() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const router = useRouter();
-  const { setCompleted } = useOnboardingStore();
 
   const handleNext = () => {
     if (currentSlide < slides.length - 1) {
       setCurrentSlide(currentSlide + 1);
     } else {
-      setCompleted(true);
+      // FIXED: Do NOT call setCompleted here. Let profile.tsx handle it after getting the name.
       router.replace('/onboarding/profile');
     }
   };

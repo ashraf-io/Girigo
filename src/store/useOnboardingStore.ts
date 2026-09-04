@@ -1,35 +1,58 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 
-const ONBOARDING_KEY = 'has_completed_onboarding';
+const CURRENT_USER_ID_KEY = 'current_user_id';
 
 interface OnboardingState {
   hasCompleted: boolean;
   isLoading: boolean;
-  setCompleted: (value: boolean) => Promise<void>;
+  currentUserId: string | null;
+  setCompleted: (value: boolean, userId: string) => Promise<void>;
   checkStatus: () => Promise<void>;
-  logout: () => Promise<void>; // Add this
+  logout: () => Promise<void>;
+  setCurrentUser: (userId: string) => void;
 }
 
 export const useOnboardingStore = create<OnboardingState>((set) => ({
   hasCompleted: false,
   isLoading: true,
-  setCompleted: async (value) => {
-    await SecureStore.setItemAsync(ONBOARDING_KEY, JSON.stringify(value));
-    set({ hasCompleted: value });
+  currentUserId: null,
+  
+  setCompleted: async (value, userId) => {
+    if (!userId || typeof userId !== 'string') {
+      console.error('❌ Invalid userId provided to setCompleted:', userId);
+      return;
+    }
+    await SecureStore.setItemAsync(CURRENT_USER_ID_KEY, userId);
+    set({ hasCompleted: value, currentUserId: userId, isLoading: false });
   },
+  
   checkStatus: async () => {
     try {
-      const stored = await SecureStore.getItemAsync(ONBOARDING_KEY);
-      set({ hasCompleted: stored === 'true', isLoading: false });
+      const userId = await SecureStore.getItemAsync(CURRENT_USER_ID_KEY);
+      set({ 
+        hasCompleted: !!userId, 
+        currentUserId: userId || null,
+        isLoading: false 
+      });
     } catch (error) {
+      console.error('Error checking session:', error);
       set({ isLoading: false });
     }
   },
+  
+  setCurrentUser: (userId) => {
+    set({ currentUserId: userId, hasCompleted: true });
+  },
+  
   logout: async () => {
-    // Clear onboarding flag
-    await SecureStore.deleteItemAsync(ONBOARDING_KEY);
-    // TODO (V2): Clear user auth token here
-    set({ hasCompleted: false });
+    try {
+      console.log('🔄 Closing session (data preserved)...');
+      await SecureStore.deleteItemAsync(CURRENT_USER_ID_KEY);
+      set({ hasCompleted: false, currentUserId: null });
+      console.log('✅ Session closed. User can log in again to retrieve progress.');
+    } catch (error) {
+      console.error('❌ Logout failed:', error);
+    }
   },
 }));
