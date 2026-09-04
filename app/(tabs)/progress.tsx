@@ -55,10 +55,12 @@ export default function ProgressScreen() {
   const completedWishes = wishes.filter(w => w.status === 'completed').length;
   const successRate = totalWishes > 0 ? Math.round((completedWishes / totalWishes) * 100) : 0;
 
-  // Level progress calculation
-  const xpForCurrentLevel = stats?.level === 1 ? 0 : (500 * (stats.level - 1) * stats.level) / 2;
-  const xpForNextLevel = (500 * stats.level * (stats.level + 1)) / 2;
-  const xpProgress = stats ? ((stats.xp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100 : 0;
+  // Level progress calculation with proper null safety
+  const currentLevel = stats?.level || 1;
+  const currentXp = stats?.xp || 0;
+  const xpForCurrentLevel = currentLevel === 1 ? 0 : (500 * (currentLevel - 1) * currentLevel) / 2;
+  const xpForNextLevel = (500 * currentLevel * (currentLevel + 1)) / 2;
+  const xpProgress = ((currentXp - xpForCurrentLevel) / (xpForNextLevel - xpForCurrentLevel)) * 100;
   const safeXpProgress = Math.min(100, Math.max(0, xpProgress));
 
   return (
@@ -78,9 +80,9 @@ export default function ProgressScreen() {
               <Trophy color={Colors.mystic[400]} size={24} />
             </View>
             <View style={styles.levelInfo}>
-              <Text style={styles.levelTitle}>Level {stats?.level || 1}</Text>
+              <Text style={styles.levelTitle}>Level {currentLevel}</Text>
               <Text style={styles.levelXp}>
-                {stats?.xp || 0} / {xpForNextLevel} XP
+                {currentXp} / {xpForNextLevel} XP
               </Text>
             </View>
           </View>

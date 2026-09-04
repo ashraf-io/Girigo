@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, Platform, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
-import { ArrowLeft, Trash2, XCircle, CheckCircle2, Edit3, Save, Calendar } from 'lucide-react-native';
+// import { ArrowLeft, Trash2, XCircle, CheckCircle2, Edit3, Save, Calendar } from 'lucide-react-native';
+import { ArrowLeft, Trash2, XCircle, CheckCircle2, Edit3, Save, Calendar, RotateCcw } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import Slider from '@react-native-community/slider';
 import { Colors } from '../../src/theme/colors';
@@ -518,7 +519,7 @@ const progressUpdateTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
           />
         </View>
 
-        <View style={styles.actionsContainer}>
+        {/* <View style={styles.actionsContainer}>
           {!isEditing && wish.status === 'active' && !isExpired && (
             <TouchableOpacity style={styles.completeButton} onPress={handleComplete}>
               <CheckCircle2 color="#fff" size={20} />
@@ -543,8 +544,43 @@ const progressUpdateTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
               <Text style={styles.completeButtonText}>Save Changes</Text>
             </TouchableOpacity>
           )}
-        </View>
+        </View> */}
+        <View style={styles.actionsContainer}>
+          {!isEditing && wish.status === 'active' && !isExpired && (
+            <TouchableOpacity style={styles.completeButton} onPress={handleComplete}>
+              <CheckCircle2 color="#fff" size={20} />
+              <Text style={styles.completeButtonText}>Mark Complete</Text>
+            </TouchableOpacity>
+          )}
 
+          {/* Reopen button for expired wishes */}
+          {!isEditing && isExpired && wish.status === 'expired' && (
+            <TouchableOpacity style={styles.reopenButton} onPress={() => handleExtendDeadline(24)}>
+              <RotateCcw color={Colors.ethereal[400]} size={20} />
+              <Text style={styles.reopenButtonText}>Reopen & Extend 24h</Text>
+            </TouchableOpacity>
+          )}
+
+          {!isEditing && (
+            <View style={styles.secondaryActions}>
+              <TouchableOpacity style={styles.abandonButton} onPress={handleAbandon}>
+                <XCircle color={Colors.ghostMuted} size={18} />
+                <Text style={styles.secondaryButtonText}>Abandon</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+                <Trash2 color={Colors.crimson[400]} size={18} />
+                <Text style={[styles.secondaryButtonText, { color: Colors.crimson[400] }]}>Delete</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          {isEditing && (
+            <TouchableOpacity style={styles.completeButton} onPress={handleSaveEdit}>
+              <Save color="#fff" size={20} />
+              <Text style={styles.completeButtonText}>Save Changes</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <Modal
           visible={showExtensionModal}
           transparent
@@ -733,5 +769,22 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontSize: 16,
     color: Colors.ghostMuted,
+  },
+    reopenButton: { 
+    flexDirection: 'row', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: Colors.ethereal[500] + '20', 
+    paddingVertical: 16, 
+    borderRadius: 16, 
+    borderWidth: 1, 
+    borderColor: Colors.ethereal[500] + '40',
+    marginBottom: 12,
+  },
+  reopenButtonText: { 
+    fontFamily: 'Inter-Bold', 
+    fontSize: 16, 
+    color: Colors.ethereal[400], 
+    marginLeft: 8 
   },
 });
