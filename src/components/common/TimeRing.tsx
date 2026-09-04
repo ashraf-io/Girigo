@@ -1,26 +1,34 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Colors } from '../../theme/colors';
 
 interface TimeRingProps {
-  percentage: number; // 0 to 100 (100 = full time remaining)
+  percentage: number;
+  label: string;
   size?: number;
-  label?: string;
+  isExpired?: boolean;
 }
 
-export const TimeRing: React.FC<TimeRingProps> = ({ percentage, size = 48, label }) => {
-  // Determine color based on urgency
-  let strokeColor = Colors.ethereal[500]; // > 48h
-  let glowColor = 'rgba(0, 206, 209, 0.6)';
-  
-  if (percentage <= 20) { // < 24h (Urgent)
-    strokeColor = Colors.crimson[500];
-    glowColor = 'rgba(220, 20, 60, 0.8)';
-  } else if (percentage <= 50) { // 24-48h
-    strokeColor = Colors.mystic[500];
-    glowColor = 'rgba(107, 45, 92, 0.7)';
-  }
+export const TimeRing: React.FC<TimeRingProps> = React.memo(({ 
+  percentage, 
+  label, 
+  size = 48,
+  isExpired = false 
+}) => {
+  const { strokeColor } = useMemo(() => {
+    if (isExpired) {
+      return { strokeColor: Colors.crimson[500] };
+    }
+    
+    if (percentage <= 20) {
+      return { strokeColor: Colors.crimson[500] };
+    } else if (percentage <= 50) {
+      return { strokeColor: Colors.mystic[500] };
+    } else {
+      return { strokeColor: Colors.ethereal[500] };
+    }
+  }, [percentage, isExpired]);
 
   const strokeWidth = 3;
   const radius = (size - strokeWidth) / 2;
@@ -30,7 +38,6 @@ export const TimeRing: React.FC<TimeRingProps> = ({ percentage, size = 48, label
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={styles.svg}>
-        {/* Background Ring */}
         <Circle
           cx={size / 2}
           cy={size / 2}
@@ -39,7 +46,6 @@ export const TimeRing: React.FC<TimeRingProps> = ({ percentage, size = 48, label
           strokeWidth={strokeWidth}
           fill="none"
         />
-        {/* Progress Ring */}
         <Circle
           cx={size / 2}
           cy={size / 2}
@@ -50,22 +56,20 @@ export const TimeRing: React.FC<TimeRingProps> = ({ percentage, size = 48, label
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
-          style={{
-            shadowColor: glowColor,
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 1,
-            shadowRadius: 8,
-          }}
         />
       </Svg>
       {label && (
         <View style={styles.labelContainer}>
-          <Text style={[styles.labelText, { color: strokeColor }]}>{label}</Text>
+          <Text style={[styles.labelText, { color: isExpired ? Colors.crimson[400] : strokeColor }]}>
+            {label}
+          </Text>
         </View>
       )}
     </View>
   );
-};
+});
+
+TimeRing.displayName = 'TimeRing';
 
 const styles = StyleSheet.create({
   container: { justifyContent: 'center', alignItems: 'center' },
