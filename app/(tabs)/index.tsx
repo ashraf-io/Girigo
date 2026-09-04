@@ -1,13 +1,24 @@
 import React, { useState, useCallback, useMemo, memo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useFocusEffect } from 'expo-router';
-import { Flame, Trophy, Target, Zap } from 'lucide-react-native';
+import { useRouter, useFocusEffect } from 'expo-router'; // ✅ Router is imported here
+import { Flame, Trophy, Target, Zap, Plus } from 'lucide-react-native'; // ✅ Plus is imported here
 import { Colors } from '../../src/theme/colors';
 import { WishRepository, Wish } from '../../src/modules/wish/wish.repository';
 import { GamificationService, GamificationStats } from '../../src/modules/gamification/gamification.service';
 import { TimeRing } from '../../src/components/common/TimeRing';
-import { useOnboardingStore } from '../../src/store/useOnboardingStore'; // <-- ADDED
+import { useOnboardingStore } from '../../src/store/useOnboardingStore';
+
+// ✅ 1. The FAB component accepts 'onPress' as a prop
+const FloatingActionButton = ({ onPress }: { onPress: () => void }) => (
+  <TouchableOpacity 
+    style={styles.fab}
+    onPress={onPress}
+    activeOpacity={0.8}
+  >
+    <Plus color="#fff" size={28} />
+  </TouchableOpacity>
+);
 
 const WishCard = memo(({ item, onPress }: { item: Wish; onPress: () => void }) => {
   const { percentage, label, isUrgent } = useMemo(() => {
@@ -52,18 +63,17 @@ const WishCard = memo(({ item, onPress }: { item: Wish; onPress: () => void }) =
 WishCard.displayName = 'WishCard';
 
 export default function DashboardScreen() {
-  // <-- ADDED: Get currentUserId from store
   const { currentUserId } = useOnboardingStore();
+  const router = useRouter(); // ✅ 2. Router is defined HERE, inside the screen
   
   const [stats, setStats] = useState<GamificationStats | null>(null);
   const [wishes, setWishes] = useState<Wish[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
 
   const loadData = useCallback(async () => {
     if (!currentUserId) {
       setIsLoading(false);
-      return; // Wait for user ID to load
+      return;
     }
     
     setIsLoading(true);
@@ -105,6 +115,10 @@ export default function DashboardScreen() {
   };
 
   const renderHeader = () => {
+    if (!currentUserId) {
+      return <View style={styles.loadingPlaceholder}><Text style={styles.loadingText}>Loading user session...</Text></View>;
+    }
+
     if (isLoading || !stats) {
       return <View style={styles.loadingPlaceholder}><Text style={styles.loadingText}>Loading your progress...</Text></View>;
     }
@@ -169,9 +183,6 @@ export default function DashboardScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Active Wishes</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/create')}>
-            <Text style={styles.sectionLink}>View all →</Text>
-          </TouchableOpacity>
         </View>
       </View>
     );
@@ -203,11 +214,14 @@ export default function DashboardScreen() {
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>📜</Text>
               <Text style={styles.emptyText}>No active wishes.</Text>
-              <Text style={styles.emptySubtext}>Tap 'Create' to inscribe your first pact.</Text>
+              <Text style={styles.emptySubtext}>Tap '+' to inscribe your first pact.</Text>
             </View>
           ) : null
         }
       />
+      
+      {/* ✅ 3. We pass the router action DOWN to the button as a prop */}
+      <FloatingActionButton onPress={() => router.push('/create')} />
     </SafeAreaView>
   );
 }
@@ -250,8 +264,7 @@ const styles = StyleSheet.create({
   },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   sectionTitle: { fontFamily: 'Inter-Bold', fontSize: 18, color: Colors.ghost },
-  sectionLink: { fontFamily: 'Inter-Bold', fontSize: 14, color: Colors.mystic[400] },
-  listContent: { paddingBottom: 32 },
+  listContent: { paddingBottom: 100 }, // Increased padding so FAB doesn't cover last item
   wishCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.abyss2, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: Colors.mystic[500] + '30', marginHorizontal: 20 },
   wishCardUrgent: { borderColor: Colors.crimson[500], shadowColor: Colors.crimson[500], shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   wishContent: { flex: 1, marginRight: 16 },
@@ -264,4 +277,24 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 48, marginBottom: 16 },
   emptyText: { fontFamily: 'Inter-Bold', fontSize: 18, color: Colors.ghost, marginBottom: 4 },
   emptySubtext: { fontFamily: 'Inter-Regular', fontSize: 14, color: Colors.ghostMuted, textAlign: 'center' },
+  
+  // ✅ 4. The FAB Styles
+  fab: {
+    position: 'absolute',
+    right: 24,
+    bottom: 90, // Positioned perfectly above the tab bar
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: Colors.mystic[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: Colors.mystic[500],
+    shadowOpacity: 0.6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: Colors.abyss,
+  },
 });

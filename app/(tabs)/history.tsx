@@ -1,31 +1,59 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native'; // ✅ Added Alert
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Archive, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react-native';
 import { Colors } from '../../src/theme/colors';
 import { WishRepository, Wish } from '../../src/modules/wish/wish.repository';
 import { getDatabase } from '../../src/db/database';
+import { useOnboardingStore } from '../../src/store/useOnboardingStore';
 
 export default function HistoryScreen() {
+  const router = useRouter();
+  const { currentUserId } = useOnboardingStore();
+  
   const [wishes, setWishes] = useState<Wish[]>([]);
   const [filter, setFilter] = useState<'all' | 'completed' | 'abandoned' | 'expired'>('all');
-  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
   const loadWishes = useCallback(() => {
     const fetchWishes = async () => {
-      const allWishes = await WishRepository.getAll(filter === 'all' ? undefined : filter);
-      const filtered = filter === 'all' 
-        ? allWishes.filter(w => w.status !== 'active')
-        : allWishes.filter(w => w.status === filter);
-      setWishes(filtered);
+      if (!currentUserId) {
+        setWishes([]);
+        return;
+      }
+      
+      setIsLoading(true);
+      try {
+        // Fetch all non-active wishes for the current user
+        const allWishes = await WishRepository.getAll(currentUserId, 'all');
+        
+        // Filter out active wishes and apply status filter
+        let filteredWishes = allWishes.filter(w => w.status !== 'active');
+        
+        if (filter !== 'all') {
+          filteredWishes = filteredWishes.filter(w => w.status === filter);
+        }
+        
+        setWishes(filteredWishes);
+      } catch (error) {
+        console.error('Failed to load history:', error);
+      } finally {
+        setIsLoading(false);
+      }
     };
     fetchWishes();
-  }, [filter]);
+  }, [filter, currentUserId]);
 
-  useFocusEffect(loadWishes);
+  useFocusEffect(
+    useCallback(() => {
+      loadWishes();
+    }, [loadWishes])
+  );
 
   const handleClearHistory = () => {
+    if (!currentUserId) return;
+    
     Alert.alert(
       'Clear History',
       `Are you sure you want to delete all ${filter === 'all' ? '' : filter} wishes? This cannot be undone.`,
@@ -39,13 +67,21 @@ export default function HistoryScreen() {
               const db = await getDatabase();
               
               if (filter === 'all') {
-                await db.runAsync("DELETE FROM wishes WHERE status != 'active'");
+                // Delete all non-active wishes for this user
+                await db.runAsync(
+                  "DELETE FROM wishes WHERE userId = ? AND status != 'active'",
+                  [currentUserId]
+                );
               } else {
-                await db.runAsync('DELETE FROM wishes WHERE status = ?', [filter]);
+                // Delete specific status for this user
+                await db.runAsync(
+                  'DELETE FROM wishes WHERE userId = ? AND status = ?',
+                  [currentUserId, filter]
+                );
               }
               
               Alert.alert('Success', 'History cleared successfully.');
-              loadWishes();
+              loadWishes(); // Reload the list
             } catch (error) {
               console.error('Failed to clear history:', error);
               Alert.alert('Error', 'Failed to clear history.');
@@ -65,26 +101,56 @@ export default function HistoryScreen() {
     }
   };
 
-  const renderWish = ({ item }: { item: Wish }) => (
-    <TouchableOpacity 
-      style={[styles.wishCard, styles[`${item.status}Card`]]}
-      onPress={() => router.push(`/wish/${item.id}`)}
-    >
-      <View style={styles.wishContent}>
-        <View style={styles.wishHeader}>
-          <Text style={[styles.wishTitle, item.status !== 'active' && styles.strikethrough]} numberOfLines={1}>
-            {item.title}
+  // const renderWish = ({ item }: { item: Wish }) => (
+  //   <TouchableOpacity 
+  //     style={[styles.wishCard, styles[`${item.status}Card`]]}
+  //     onPress={() => router.push(`/wish/${item.id}`)}
+  //   >
+  //     <View style={styles.wishContent}>
+  //       <View style={styles.wishHeader}>
+  //         <Text style={[styles.wishTitle, item.status !== 'active' && styles.strikethrough]} numberOfLines={1}>
+  //           {item.title}
+  //         </Text>
+  //         {getStatusIcon(item.status)}
+  //       </View>
+  //       <Text style={styles.wishCategory}>{item.category}</Text>
+  //       <Text style={styles.wishDate}>
+  //         {item.status === 'completed' && item.completedAt ? `Completed: ${new Date(item.completedAt).toLocaleDateString()}` : 
+  //          item.status === 'abandoned' ? 'Abandoned' : 'Expired'}
+  //       </Text>
+  //     </View>
+  //   </TouchableOpacity>
+  // );
+    const renderWish = ({ item }: { item: Wish }) => {
+    // ✅ FIX: Create style array instead of dynamic indexing
+    const cardStyles = [
+      styles.wishCard,
+      item.status === 'completed' && styles.completedCard,
+      item.status === 'abandoned' && styles.abandonedCard,
+      item.status === 'expired' && styles.expiredCard,
+    ].filter(Boolean);
+
+    return (
+      <TouchableOpacity 
+        style={cardStyles}
+        onPress={() => router.push(`/wish/${item.id}`)}
+      >
+        <View style={styles.wishContent}>
+          <View style={styles.wishHeader}>
+            <Text style={[styles.wishTitle, item.status !== 'active' && styles.strikethrough]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            {getStatusIcon(item.status)}
+          </View>
+          <Text style={styles.wishCategory}>{item.category}</Text>
+          <Text style={styles.wishDate}>
+            {item.status === 'completed' && item.completedAt ? `Completed: ${new Date(item.completedAt).toLocaleDateString()}` : 
+             item.status === 'abandoned' ? 'Abandoned' : 'Expired'}
           </Text>
-          {getStatusIcon(item.status)}
         </View>
-        <Text style={styles.wishCategory}>{item.category}</Text>
-        <Text style={styles.wishDate}>
-          {item.status === 'completed' && item.completedAt ? `Completed: ${new Date(item.completedAt).toLocaleDateString()}` : 
-           item.status === 'abandoned' ? 'Abandoned' : 'Expired'}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeContainer} edges={['top']}>
@@ -120,6 +186,9 @@ export default function HistoryScreen() {
             <View style={styles.emptyState}>
               <Archive color={Colors.ghostDim} size={48} />
               <Text style={styles.emptyText}>No history yet.</Text>
+              <Text style={styles.emptySubtext}>
+                {isLoading ? 'Loading...' : 'Completed wishes will appear here.'}
+              </Text>
             </View>
           }
         />
@@ -159,4 +228,5 @@ const styles = StyleSheet.create({
   wishDate: { fontSize: 12, color: Colors.ghostDim, fontFamily: 'JetBrainsMono-Regular' },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyText: { fontFamily: 'Inter-Regular', fontSize: 16, color: Colors.ghostMuted, marginTop: 16 },
+  emptySubtext: { fontFamily: 'Inter-Regular', fontSize: 14, color: Colors.ghostDim, textAlign: 'center', marginTop: 8 },
 });
