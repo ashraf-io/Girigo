@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, Platform, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { ArrowLeft, Trash2, XCircle, CheckCircle2, Edit3, Save, Calendar } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -20,9 +21,7 @@ export default function WishDetailScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [showExtensionModal, setShowExtensionModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [hasShownExpiredAlert, setHasShownExpiredAlert] = useState(false);
-  
-  // Ref to track if we're currently showing an alert (prevents double-triggering)
+  const [hasShownExpiredAlert, setHasShownExpiredAlert] = useState(false];
   const isShowingAlert = useRef(false);
 
   // Edit state
@@ -64,14 +63,12 @@ export default function WishDetailScreen() {
   useEffect(() => {
     if (wish && !isEditing && wish.status === 'active') {
       const isExpired = new Date(wish.deadline) < new Date();
-      
+
       if (isExpired && !hasShownExpiredAlert && !isShowingAlert.current) {
         isShowingAlert.current = true;
         setHasShownExpiredAlert(true);
-        
-        // Small delay to ensure UI is ready
         setTimeout(() => {
-          showExpiredOptions();
+          setShowExpiredModal(true);
         }, 300);
       }
     }
@@ -152,53 +149,20 @@ export default function WishDetailScreen() {
     }
   };
 
-  const showExpiredOptions = () => {
-    Alert.alert(
-      'Deadline Passed',
-      'This wish has expired. What would you like to do?',
-      [
-        { text: 'Mark Complete', onPress: handleComplete },
-        { 
-          text: 'Extend Deadline', 
-          onPress: () => {
-            setShowExtensionModal(true);
-            isShowingAlert.current = false;
-          } 
-        },
-        { text: 'Abandon', style: 'destructive', onPress: handleAbandon },
-      ],
-      { cancelable: false }
-    );
+  // Moved function outside of JSX return block
+  const handleExpiredOptionPress = (option: 'complete' | 'extend' | 'abandon') => {
+    setShowExpiredModal(false);
+
+    if (option === 'complete') {
+      handleComplete();
+    } else if (option === 'extend') {
+      setShowExtensionModal(true);
+    } else if (option === 'abandon') {
+      handleAbandon();
+    }
   };
 
-  // Cleanup effect
-  useEffect(() => {
-    return () => {
-      setShowDatePicker(false);
-      isShowingAlert.current = false;
-      hasShownExpiredAlert = false;
-    };
-  }, []);
-
-  // Debounced progress update to prevent excessive DB writes
-  const progressUpdateTimeout = useRef<NodeJS.Timeout | null>(null);
-  
-  const handleProgressChange = useCallback((value: number) => {
-    setProgress(value);
-    if (wish) {
-      // Clear any pending update
-      if (progressUpdateTimeout.current) {
-        clearTimeout(progressUpdateTimeout.current);
-      }
-      // Debounce DB write by 300ms
-      progressUpdateTimeout.current = setTimeout(async () => {
-        await WishRepository.updateProgress(wish.id, Math.round(value));
-      }, 300);
-    }
-  }, [wish]);
-
   const handleComplete = async () => {
-    if (!wish) return;
     isShowingAlert.current = false; // Reset flag
     
     Alert.alert('Mark Complete', 'Are you sure you want to mark this wish as complete? You will earn XP!', [
@@ -210,8 +174,8 @@ export default function WishDetailScreen() {
           try {
             const result = await GamificationService.processWishCompletion(wish.id, wish.priority, wish.deadline);
             Alert.alert(
-              'Wish Completed! ', 
-              `You earned +${result.xpEarned} XP!\n${result.leveledUp ? `🎊 You reached Level ${result.newLevel}!` : ''}`, 
+              'Wish Completed! ',
+              `You earned +${result.xpEarned} XP!\n${result.leveledUp ? `🎊 You reached Level ${result.newLevel}!` : ''}`,
               [{ text: 'Awesome', onPress: () => router.back() }]
             );
           } catch (error) {
@@ -225,7 +189,6 @@ export default function WishDetailScreen() {
   const handleAbandon = () => {
     if (!wish) return;
     isShowingAlert.current = false; // Reset flag
-    
     Alert.alert('Abandon Wish', 'Are you sure you want to abandon this wish? This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -241,7 +204,7 @@ export default function WishDetailScreen() {
 
   const handleDelete = () => {
     if (!wish) return;
-    
+
     Alert.alert('Delete Wish', 'This will permanently delete this wish from your records.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -256,186 +219,234 @@ export default function WishDetailScreen() {
   };
 
   if (isLoading || !wish) {
-    return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={Colors.crimson[500]} /></View>;
+    return (
+      <SafeAreaView style={styles.safeContainer} edges={['top']}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.crimson[500]} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   const isUrgent = (new Date(wish.deadline).getTime() - Date.now()) / (1000 * 60 * 60) < 24;
   const isExpired = new Date(wish.deadline) < new Date();
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft color={Colors.ghost} size={24} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={2}>{isEditing ? 'Edit Wish' : wish.title}</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => isEditing ? handleSaveEdit() : setIsEditing(true)}>
-          {isEditing ? <Save color={Colors.ethereal[400]} size={24} /> : <Edit3 color={Colors.ghost} size={24} />}
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={styles.safeContainer} edges={['top']}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <ArrowLeft color={Colors.ghost} size={24} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={2}>{isEditing ? 'Edit Wish' : wish.title}</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => isEditing ? handleSaveEdit() : setIsEditing(true)}>
+            {isEditing ? <Save color={Colors.ethereal[400]} size={24} /> : <Edit3 color={Colors.ghost} size={24} />}
+          </TouchableOpacity>
+        </View>
 
-      <View style={styles.deadlineCard}>
-        <TimeRing
-          percentage={Math.max(0, Math.min(100, ((new Date(wish.deadline).getTime() - Date.now()) / 604800000) * 100))}
-          label={isExpired ? 'EXPIRED' : isUrgent ? 'URGENT' : `${Math.ceil((new Date(wish.deadline).getTime() - Date.now()) / (1000 * 60 * 60))}h`}
-          size={120}
-        />
-        <Text style={styles.deadlineText}>Due: {new Date(wish.deadline).toLocaleString()}</Text>
-      </View>
+        <View style={styles.deadlineCard}>
+          <TimeRing
+            percentage={Math.max(0, Math.min(100, ((new Date(wish.deadline).getTime() - Date.now()) / 604800000) * 100))}
+            label={isExpired ? 'EXPIRED' : isUrgent ? 'URGENT' : `${Math.ceil((new Date(wish.deadline).getTime() - Date.now()) / (1000 * 60 * 60))}h`}
+            size={120}
+          />
+          <Text style={styles.deadlineText}>Due: {new Date(wish.deadline).toLocaleString()}</Text>
+        </View>
 
-      <View style={styles.detailsCard}>
-        {isEditing ? (
-          <>
-            <TextInput style={styles.editInput} value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={Colors.ghostDim} />
-            <TextInput style={[styles.editInput, styles.editTextArea]} value={editDescription} onChangeText={setEditDescription} placeholder="Description" placeholderTextColor={Colors.ghostDim} multiline numberOfLines={3} />
+        <View style={styles.detailsCard}>
+          {isEditing ? (
+            <>
+              <TextInput style={styles.editInput} value={editTitle} onChangeText={setEditTitle} placeholder="Title" placeholderTextColor={Colors.ghostDim} />
+              <TextInput style={[styles.editInput, styles.editTextArea]} value={editDescription} onChangeText={setEditDescription} placeholder="Description" placeholderTextColor={Colors.ghostDim} multiline numberOfLines={3} />
 
-            <TouchableOpacity style={styles.deadlineButton} onPress={() => setShowDatePicker(true)}>
-              <Calendar color={Colors.mystic[400]} size={20} />
-              <Text style={styles.deadlineButtonText}>
-                {editDeadline.toLocaleString()}
-              </Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.deadlineButton} onPress={() => setShowDatePicker(true)}>
+                <Calendar color={Colors.mystic[400]} size={20} />
+                <Text style={styles.deadlineButtonText}>
+                  {editDeadline.toLocaleString()}
+                </Text>
+              </TouchableOpacity>
 
-            {showDatePicker && (
-              <DateTimePicker
-                value={editDeadline}
-                mode="datetime"
-                display="default"
-                onChange={(event, selectedDate) => {
-                  setShowDatePicker(Platform.OS === 'ios');
-                  if (selectedDate) setEditDeadline(selectedDate);
-                }}
-              />
-            )}
-          </>
-        ) : (
-          <>
-            <View style={styles.metaRow}>
-              <Text style={styles.categoryBadge}>{wish.category}</Text>
-              <Text style={[styles.priorityBadge, wish.priority === 'high' && styles.priorityHigh]}>{wish.priority.toUpperCase()}</Text>
-            </View>
-            {wish.description ? <Text style={styles.description}>{wish.description}</Text> : null}
-            {wish.priority === 'high' && wish.commitment ? (
-              <View style={styles.commitmentBox}>
-                <Text style={styles.commitmentLabel}>📜 Your Commitment</Text>
-                <Text style={styles.commitmentText}>"{wish.commitment}"</Text>
+              {showDatePicker && (
+                <DateTimePicker
+                  value={editDeadline}
+                  mode="datetime"
+                  display="default"
+                  onChange={(event, selectedDate) => {
+                    setShowDatePicker(Platform.OS === 'ios');
+                    if (selectedDate) setEditDeadline(selectedDate);
+                  }}
+                />
+              )}
+            </>
+          ) : (
+            <>
+              <View style={styles.metaRow}>
+                <Text style={styles.categoryBadge}>{wish.category}</Text>
+                <Text style={[styles.priorityBadge, wish.priority === 'high' && styles.priorityHigh]}>{wish.priority.toUpperCase()}</Text>
               </View>
-            ) : null}
-          </>
-        )}
-      </View>
-
-      <View style={styles.progressCard}>
-        <View style={styles.progressHeader}>
-          <Text style={styles.progressLabel}>Progress</Text>
-          <Text style={styles.progressValue}>{Math.round(progress)}%</Text>
+              {wish.description ? <Text style={styles.description}>{wish.description}</Text> : null}
+              {wish.priority === 'high' && wish.commitment ? (
+                <View style={styles.commitmentBox}>
+                  <Text style={styles.commitmentLabel}>📜 Your Commitment</Text>
+                  <Text style={styles.commitmentText}>"{wish.commitment}"</Text>
+                </View>
+              ) : null}
+            </>
+          )}
         </View>
-        <Slider
-          style={styles.slider}
-          minimumValue={0}
-          maximumValue={100}
-          step={1}
-          value={progress}
-          onValueChange={handleProgressChange}
-          minimumTrackTintColor={Colors.mystic[500]}
-          maximumTrackTintColor={Colors.abyss3}
-          thumbTintColor={Colors.ethereal[400]}
-        />
-      </View>
 
-      <View style={styles.actionsContainer}>
-        {!isEditing && wish.status === 'active' && !isExpired && (
-          <TouchableOpacity style={styles.completeButton} onPress={handleComplete}>
-            <CheckCircle2 color="#fff" size={20} />
-            <Text style={styles.completeButtonText}>Mark Complete</Text>
-          </TouchableOpacity>
-        )}
-        {!isEditing && (
-          <View style={styles.secondaryActions}>
-            <TouchableOpacity style={styles.abandonButton} onPress={handleAbandon}>
-              <XCircle color={Colors.ghostMuted} size={18} />
-              <Text style={styles.secondaryButtonText}>Abandon</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
-              <Trash2 color={Colors.crimson[400]} size={18} />
-              <Text style={[styles.secondaryButtonText, { color: Colors.crimson[400] }]}>Delete</Text>
-            </TouchableOpacity>
+        <View style={styles.progressCard}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressLabel}>Progress</Text>
+            <Text style={styles.progressValue}>{Math.round(progress)}%</Text>
           </View>
-        )}
-        {isEditing && (
-          <TouchableOpacity style={styles.completeButton} onPress={handleSaveEdit}>
-            <Save color="#fff" size={20} />
-            <Text style={styles.completeButtonText}>Save Changes</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={100}
+            step={1}
+            value={progress}
+            onValueChange={handleProgressChange}
+            minimumTrackTintColor={Colors.mystic[500]}
+            maximumTrackTintColor={Colors.abyss3}
+            thumbTintColor={Colors.ethereal[400]}
+          />
+        </View>
 
-      {/* Extension Modal */}
-      <Modal
-        visible={showExtensionModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowExtensionModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Extend Deadline</Text>
+        <View style={styles.actionsContainer}>
+          {!isEditing && wish.status === 'active' && !isExpired && (
+            <TouchableOpacity style={styles.completeButton} onPress={handleComplete}>
+              <CheckCircle2 color="#fff" size={20} />
+              <Text style={styles.completeButtonText}>Mark Complete</Text>
+            </TouchableOpacity>
+          }}
 
-            <Text style={styles.modalSubtitle}>Quick Options:</Text>
-            <View style={styles.quickOptions}>
-              <TouchableOpacity style={styles.quickOption} onPress={() => handleExtendDeadline(2)}>
-                <Text style={styles.quickOptionText}>+2 hours</Text>
+          {!isEditing && wish.status === 'active' && (
+            <View style={styles.secondaryActions}>
+              <TouchableOpacity style={styles.abandonButton} onPress={handleAbandon}>
+                <XCircle color={Colors.ghostMuted} size={18} />
+                <Text style={styles.secondaryButtonText}>Abandon</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.quickOption} onPress={() => handleExtendDeadline(6)}>
-                <Text style={styles.quickOptionText}>+6 hours</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.quickOption} onPress={() => handleExtendDeadline(24)}>
-                <Text style={styles.quickOptionText}>+1 day</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.quickOption} onPress={() => handleExtendDeadline(72)}>
-                <Text style={styles.quickOptionText}>+3 days</Text>
+              <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+                <Trash2 color={Colors.crimson[400]} size={18} />
+                <Text style={[styles.secondaryButtonText, { color: Colors.crimson[400] }]}>Delete</Text>
               </TouchableOpacity>
             </View>
+          }}
 
-            <Text style={styles.modalSubtitle}>Or pick custom date:</Text>
-            <TouchableOpacity style={styles.customDeadlineButton} onPress={() => setShowDatePicker(true)}>
-              <Calendar color={Colors.mystic[400]} size={20} />
-              <Text style={styles.customDeadlineText}>
-                {editDeadline.toLocaleString()}
-              </Text>
+          {isEditing && (
+            <TouchableOpacity style={styles.completeButton} onPress={handleSaveEdit}>
+              <Save color="#fff" size={20} />
+              <Text style={styles.completeButtonText}>Save Changes</Text>
             </TouchableOpacity>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={editDeadline}
-                mode="datetime"
-                display="default"
-                onChange={(event, selectedDate) => {
-                  setShowDatePicker(Platform.OS === 'ios');
-                  if (selectedDate) {
-                    handleExtendDeadlineCustomDate(selectedDate);
-                  }
-                }}
-              />
-            )}
-
-            <TouchableOpacity
-              style={styles.modalCancelButton}
-              onPress={() => {
-                setShowExtensionModal(false);
-                isShowingAlert.current = false;
-              }}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
+          )}
         </View>
-      </Modal>
-    </ScrollView>
+
+        {/* Extension Modal */}
+        <Modal
+          visible={showExtensionModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowExtensionModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Extend Deadline</Text>
+
+              <Text style={styles.modalSubtitle}>Quick Options:</Text>
+              <View style={styles.quickOptions}>
+                <TouchableOpacity style={styles.quickOption} onPress={() => handleExtendDeadline(2)}>
+                  <Text style={styles.quickOptionText}>+2 hours</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickOption} onPress={() => handleExtendDeadline(6)}>
+                  <Text style={styles.quickOptionText}>+6 hours</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickOption} onPress={() => handleExtendDeadline(24)}>
+                  <Text style={styles.quickOptionText}>+1 day</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.quickOption} onPress={() => handleExtendDeadline(72)}>
+                  <Text style={styles.quickOptionText}>+3 days</Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalSubtitle}>Or pick custom date:</Text>
+              <TouchableOpacity style={styles.customDeadlineButton} onPress={() => setShowDatePicker(true)}>
+                <Calendar color={Colors.mystic[400]} size={20} />
+                <Text style={styles.customDeadlineText}>
+                  {editDeadline.toLocaleString()}
+                </Text>
+              </TouchableOpacity>
+
+              {showDatePicker && (
+                <DateTimePicker
+                  value={editDeadline}
+                  mode="datetime"
+                  display="default"
+                  onChange={(event, selectedDate) => {
+                    setShowDatePicker(Platform.OS === 'ios');
+                    if (selectedDate) {
+                      handleExtendDeadlineCustomDate(selectedDate);
+                    }
+                  }}
+                />
+              )}
+
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setShowExtensionModal(false);
+                  isShowingAlert.current = false;
+                }}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Modal>
+        </Modal>
+
+        {/* Expired Options Modal */}
+        <Modal
+          visible={showExpiredModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowExpiredModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Deadline Passed</Text>
+              <Text style={styles.modalSubtitle}>This wish has expired. What would you like to do?</Text>
+
+              <TouchableOpacity style={styles.expiredOptionButton} onPress={() => handleExpiredOptionPress('complete')}>
+                <CheckCircle2 color={Colors.ethereal[400]} size={20} />
+                <Text style={styles.expiredOptionText}>Mark Complete</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.expiredOptionButton} onPress={() => handleExpiredOptionPress('extend')}>
+                <Calendar color={Colors.mystic[400]} size={20} />
+                <Text style={styles.expiredOptionText}>Extend Deadline</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.expiredOptionButton} onPress={() => handleExpiredOptionPress('abandon')}>
+                <XCircle color={Colors.crimson[400]} size={20} />
+                <Text style={[styles.expiredOptionText, { color: Colors.crimson[400] }]}>Abandon Wish</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowExpiredModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Modal>
+        </Modal>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeContainer: { flex: 1, backgroundColor: Colors.abyss },
   container: { flex: 1, backgroundColor: Colors.abyss },
   content: { padding: 20, paddingBottom: 40 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: Colors.abyss },
@@ -498,15 +509,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-ExtraBold',
     fontSize: 22,
     color: Colors.ghost,
-    marginBottom: 20,
+    marginBottom: 12,
     textAlign: 'center',
   },
   modalSubtitle: {
-    fontFamily: 'Inter-Bold',
+    fontFamily: 'Inter-Regular',
     fontSize: 14,
     color: Colors.ghostMuted,
-    marginBottom: 12,
-    marginTop: 8,
+    marginBottom: 16,
+    textAlign: 'center',
   },
   quickOptions: {
     flexDirection: 'row',
@@ -557,5 +568,17 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Bold',
     fontSize: 16,
     color: Colors.ghostMuted,
+  },
+  expiredOptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.abyss,
+    borderWidth: 1,
+    borderColor: Colors.mystic[500] + '30',
+    borderRadius: 12,
+    paddingVertical: 16,
+    marginBottom: 12,
+    gap: 10,
   },
 });
